@@ -71,7 +71,7 @@ export default function InputForm() {
 
       const analysisResults = await analyzeResponse.json();
       
-      // Store results in sessionStorage (simple approach for hackathon)
+      // Store results in sessionStorage for dashboard display
       sessionStorage.setItem('analysisResults', JSON.stringify(analysisResults));
       
       // Redirect to dashboard

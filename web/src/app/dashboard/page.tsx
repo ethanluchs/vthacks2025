@@ -7,17 +7,21 @@ import OverallScore from '@/components/dashboard/OverallScore';
 import MetricsPanel from '@/components/dashboard/MetricsPanel';
 import FilesAnalyzed from '@/components/dashboard/FilesAnalyzed';
 import VisualAnalysis from '@/components/dashboard/VisualAnalysis';
+import { BackendAnalysisResponse } from '@/lib/types';
+
+interface Screenshot {
+  url: string;
+  title: string;
+  issues: Array<{ x: number; y: number; type: string }>;
+}
 
 interface AnalysisResults {
   overallScore: number;
-  aria: { score: number; issues: number; details?: any[] };
-  altText: { score: number; issues: number; details?: any[] };
-  structure: { score: number; issues: number; details?: any[] };
+  aria: { score: number; issues: number; details?: Array<Record<string, unknown>> };
+  altText: { score: number; issues: number; details?: Array<Record<string, unknown>> };
+  structure: { score: number; issues: number; details?: Array<Record<string, unknown>> };
   files: string[];
-  screenshot?: {
-    url: string;
-    issues: Array<{ x: number; y: number; type: string }>;
-  };
+  screenshots: Screenshot[];
 }
 
 export default function Dashboard() {
@@ -26,35 +30,16 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Temporary mock data for testing
-  const mockData = {
-    aria: { total_without_aria: 3, total_elements: 20, missing_elements: [] },
-    altText: { images_without_alt: 2, total_images: 10, details: [] },
-    structure: { total_issues: 1, total_checks: 15, issues: [] },
-    files: ['test.html', 'style.css'],
-    screenshot: {
-      url: '/tarey.jpeg',
-      issues: [
-        { x: 120, y: 200, type: 'Missing ARIA label' },
-        { x: 300, y: 450, type: 'No alt text' }
-      ]
-    }
-  };
+
 
   useEffect(() => {
     // Get analysis results from sessionStorage
     const storedResults = sessionStorage.getItem('analysisResults');
     
-    // TEMPORARY: Use mock data if no stored results
     if (!storedResults) {
-      setAnalysisData(processAnalysisResults(mockData));
+      setError('Please upload files first to see the analysis dashboard');
       setLoading(false);
       return;
-      
-      // Normal behavior (uncomment when ready):
-      // setError('Please upload files first to see the analysis dashboard');
-      // setLoading(false);
-      // return;
     }
 
     try {
@@ -68,8 +53,8 @@ export default function Dashboard() {
     }
   }, [router]);
 
-  const processAnalysisResults = (rawResults: any): AnalysisResults => {
-    // Process the raw Python script output into dashboard format
+  const processAnalysisResults = (rawResults: BackendAnalysisResponse): AnalysisResults => {
+    // Process the raw backend analysis output into dashboard format
     
     // Calculate scores based on issues found
     const calculateScore = (issues: number, total: number) => {
@@ -77,7 +62,7 @@ export default function Dashboard() {
       return Math.max(0, Math.round(((total - issues) / total) * 100));
     };
 
-    // Extract data from Python analysis
+    // Extract data from backend analysis
     const ariaIssues = rawResults.aria?.total_without_aria || 0;
     const ariaTotal = rawResults.aria?.total_elements || 1;
     
@@ -108,20 +93,32 @@ export default function Dashboard() {
     // Calculate overall score
     const overallScore = Math.round((aria.score + altText.score + structure.score) / 3);
 
+    // Handle both single screenshot (legacy) and multiple screenshots
+    let screenshots: Screenshot[] = [];
+    
+    if (rawResults.screenshots && Array.isArray(rawResults.screenshots)) {
+      // New format with multiple screenshots
+      screenshots = rawResults.screenshots;
+    } else {
+      // Fallback placeholder when no screenshots available
+      screenshots = [{
+        url: '/tarey.jpeg',
+        title: 'Main Page',
+        issues: [
+          { x: 120, y: 200, type: 'Missing ARIA label' },
+          { x: 300, y: 450, type: 'No alt text' },
+          { x: 800, y: 150, type: 'Poor contrast' }
+        ]
+      }];
+    }
+
     return {
       overallScore,
       aria,
       altText,
       structure,
       files: rawResults.files || ['Unknown files'],
-      screenshot: {
-        url: '../../components/dashboard/tarey.jpeg', // Placeholder
-        issues: [
-          { x: 120, y: 200, type: 'Missing ARIA label' },
-          { x: 300, y: 450, type: 'No alt text' },
-          { x: 800, y: 150, type: 'Poor contrast' }
-        ]
-      }
+      screenshots
     };
   };
 
@@ -180,49 +177,49 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-start mb-8">
             <DashboardHeader 
-            filesCount={analysisData.files.length}
-            issuesCount={totalIssues}
-            completedAt={completedAt}
-          />
-          <button
-            onClick={handleNewAnalysis}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors"
-          >
-            New Analysis
-          </button>
-        </div>
-
-        {/* Grid layout */}
-        <div className="grid grid-cols-5 gap-6 h-[75vh]">
-          {/* Left Column - Metrics */}
-          <div className="col-span-1 space-y-4">
-            <OverallScore score={analysisData.overallScore} />
-            
-            <MetricsPanel 
-              aria={analysisData.aria}
-              altText={analysisData.altText}
-              structure={analysisData.structure}
+              filesCount={analysisData.files.length}
+              issuesCount={totalIssues}
+              completedAt={completedAt}
             />
-
-            <FilesAnalyzed files={analysisData.files} />
+            <button
+              onClick={handleNewAnalysis}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors"
+            >
+              New Analysis
+            </button>
           </div>
 
-          {/* Main Screenshot Area */}
-          <div className="col-span-4">
-            <VisualAnalysis screenshot={analysisData.screenshot!} />
+          {/* Grid layout */}
+          <div className="grid grid-cols-5 gap-6 h-[75vh]">
+            {/* Left Column - Metrics */}
+            <div className="col-span-1 space-y-4">
+              <OverallScore score={analysisData.overallScore} />
+              
+              <MetricsPanel 
+                aria={analysisData.aria}
+                altText={analysisData.altText}
+                structure={analysisData.structure}
+              />
+
+              <FilesAnalyzed files={analysisData.files} />
+            </div>
+
+            {/* Main Screenshot Area */}
+            <div className="col-span-4">
+              <VisualAnalysis screenshots={analysisData.screenshots} />
+            </div>
           </div>
+
+          {/* Debug info (remove for production) */}
+          {process.env.NODE_ENV === 'development' && (
+            <details className="mt-8 p-4 bg-zinc-900 rounded-lg">
+              <summary className="text-sm text-zinc-400 cursor-pointer">Debug: Raw Analysis Data</summary>
+              <pre className="mt-2 text-xs text-zinc-500 overflow-auto">
+                {JSON.stringify(analysisData, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
-
-        {/* Debug info (remove for production) */}
-        {process.env.NODE_ENV === 'development' && (
-          <details className="mt-8 p-4 bg-zinc-900 rounded-lg">
-            <summary className="text-sm text-zinc-400 cursor-pointer">Debug: Raw Analysis Data</summary>
-            <pre className="mt-2 text-xs text-zinc-500 overflow-auto">
-              {JSON.stringify(analysisData, null, 2)}
-            </pre>
-          </details>
-        )}
-      </div>
       )}
     </div>
   );
