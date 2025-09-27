@@ -1,0 +1,313 @@
+{
+  "analysis_date": "2025-09-27T16:17:19.333856",
+  "analysis_type": "Complete Website Analysis (Accessibility, Code Quality & Image Alt Tags)",
+  "directory": ".",
+  "summary": {
+    "accessibility": {
+      "total_interactive_elements": 14,
+      "total_elements_without_aria": 8,
+      "overall_percentage_without_aria": 57.1,
+      "missing_by_element_type": {
+        "img": 1,
+        "button": 3,
+        "input": 3,
+        "select": 1
+      },
+      "files_with_aria_issues": 2
+    },
+    "code_quality": {
+      "total_nesting_issues": 1,
+      "issues_by_type": {
+        "HTML_IMPROPER_NESTING": 1
+      },
+      "files_with_nesting_issues": 1
+    },
+    "image_accessibility": {
+      "total_images": 2,
+      "total_images_without_alt": 0,
+      "overall_percentage_without_alt": 0,
+      "files_with_image_issues": 0
+    },
+    "overall": {
+      "total_files_analyzed": 2,
+      "total_files_with_issues": 2,
+      "total_issues_found": 9,
+      "accessibility_score": 71.5,
+      "aria_accessibility_score": 42.9,
+      "image_accessibility_score": 100
+    }
+  },
+  "files": [
+    {
+      "filename": "images.html",
+      "file_path": ".\\images.html",
+      "file_type": ".html",
+      "accessibility": {
+        "total_interactive_elements": 2,
+        "elements_without_aria": 1,
+        "percentage_without_aria": 50.0,
+        "missing_by_type": {
+          "img": 1
+        },
+        "missing_elements": [
+          {
+            "type": "img",
+            "html": "<img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>",
+            "context": "Element: <img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>"
+          }
+        ]
+      },
+      "code_quality": {
+        "nesting_issues_count": 1,
+        "nesting_issues": [
+          {
+            "type": "HTML_IMPROPER_NESTING",
+            "line": 40,
+            "message": "Invalid nesting: <p> inside <p>",
+            "code": "<p class=\"description\">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>"
+          }
+        ]
+      },
+      "image_accessibility": {
+        "total_images": 0,
+        "images_without_alt": 0,
+        "percentage_without_alt": 0,
+        "missing_images": []
+      }
+    },
+    {
+      "filename": "test2.html",
+      "file_path": ".\\test2.html",
+      "file_type": ".html",
+      "accessibility": {
+        "total_interactive_elements": 12,
+        "elements_without_aria": 7,
+        "percentage_without_aria": 58.3,
+        "missing_by_type": {
+          "button": 3,
+          "input": 3,
+          "select": 1
+        },
+        "missing_elements": [
+          {
+            "type": "button",
+            "html": "<button>💾 Save</button>",
+            "context": "Line 102: <button>💾 Save</button>"
+          },
+          {
+            "type": "button",
+            "html": "<button>🗑️ Delete</button>",
+            "context": "Line 103: <button>🗑️ Delete</button>"
+          },
+          {
+            "type": "button",
+            "html": "<button>❌</button>",
+            "context": "Line 104: <button>❌</button>"
+          },
+          {
+            "type": "input",
+            "html": "<input aria-required=\"true\" id=\"good-email\" type=\"email\"/>",
+            "context": "Element: <input aria-required=\"true\" id=\"good-email\" type=\"email\"/>"
+          },
+          {
+            "type": "input",
+            "html": "<input type=\"text\"/>",
+            "context": "Element: <input type=\"text\"/>"
+          },
+          {
+            "type": "input",
+            "html": "<input type=\"email\"/>",
+            "context": "Element: <input type=\"email\"/>"
+          },
+          {
+            "type": "select",
+            "html": "<select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>",
+            "context": "Element: <select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>"
+          }
+        ]
+      },
+      "code_quality": {
+        "nesting_issues_count": 0,
+        "nesting_issues": []
+      },
+      "image_accessibility": {
+        "total_images": 0,
+        "images_without_alt": 0,
+        "percentage_without_alt": 0,
+        "missing_images": []
+      }
+    }
+  ],
+  "issues": {
+    "aria_issues": [
+      {
+        "filename": "images.html",
+        "file_path": ".\\images.html",
+        "element_type": "img",
+        "element_html": "<img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>",
+        "context": "Element: <img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "element_html": "<button>💾 Save</button>",
+        "context": "Line 102: <button>💾 Save</button>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "element_html": "<button>🗑️ Delete</button>",
+        "context": "Line 103: <button>🗑️ Delete</button>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "element_html": "<button>❌</button>",
+        "context": "Line 104: <button>❌</button>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "element_html": "<input aria-required=\"true\" id=\"good-email\" type=\"email\"/>",
+        "context": "Element: <input aria-required=\"true\" id=\"good-email\" type=\"email\"/>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "element_html": "<input type=\"text\"/>",
+        "context": "Element: <input type=\"text\"/>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "element_html": "<input type=\"email\"/>",
+        "context": "Element: <input type=\"email\"/>"
+      },
+      {
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "select",
+        "element_html": "<select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>",
+        "context": "Element: <select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>"
+      }
+    ],
+    "nesting_issues": [
+      {
+        "filename": "images.html",
+        "file_path": ".\\images.html",
+        "line": 40,
+        "type": "HTML_IMPROPER_NESTING",
+        "message": "Invalid nesting: <p> inside <p>",
+        "code": "<p class=\"description\">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>"
+      }
+    ],
+    "image_alt_issues": [],
+    "all_issues": [
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "images.html",
+        "file_path": ".\\images.html",
+        "element_type": "img",
+        "context": "Element: <img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>",
+        "element_html": "<img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>",
+        "severity": "medium"
+      },
+      {
+        "category": "code_quality",
+        "subcategory": "nesting",
+        "type": "HTML_IMPROPER_NESTING",
+        "filename": "images.html",
+        "file_path": ".\\images.html",
+        "line": 40,
+        "message": "Invalid nesting: <p> inside <p>",
+        "code": "<p class=\"description\">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "context": "Line 102: <button>💾 Save</button>",
+        "element_html": "<button>💾 Save</button>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "context": "Line 103: <button>🗑️ Delete</button>",
+        "element_html": "<button>🗑️ Delete</button>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "button",
+        "context": "Line 104: <button>❌</button>",
+        "element_html": "<button>❌</button>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "context": "Element: <input aria-required=\"true\" id=\"good-email\" type=\"email\"/>",
+        "element_html": "<input aria-required=\"true\" id=\"good-email\" type=\"email\"/>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "context": "Element: <input type=\"text\"/>",
+        "element_html": "<input type=\"text\"/>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "input",
+        "context": "Element: <input type=\"email\"/>",
+        "element_html": "<input type=\"email\"/>",
+        "severity": "medium"
+      },
+      {
+        "category": "accessibility",
+        "subcategory": "aria_labels",
+        "type": "missing_aria_label",
+        "filename": "test2.html",
+        "file_path": ".\\test2.html",
+        "element_type": "select",
+        "context": "Element: <select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>",
+        "element_html": "<select>\n<option value=\"\">Choose...</option>\n<option value=\"us\">United States</option>\n<option value=\"ca\">Canada</option>\n</select>",
+        "severity": "medium"
+      }
+    ]
+  }
+}
