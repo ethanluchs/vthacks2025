@@ -892,3 +892,52 @@ if __name__ == "__main__":
 
     # Option 3: Analyze specific directory
     # analyze_directory("/path/to/your/html/files")
+
+def analyze_files(file_paths, tmp_dir):
+    """
+    Entry point function for backend to analyze uploaded files
+    Uses existing analysis functions in this module
+    """
+    from datetime import datetime
+    import tempfile
+    import shutil
+    import os
+    
+    # Create a working directory and copy files there
+    work_dir = tempfile.mkdtemp(prefix="code_analysis_")
+    
+    try:
+        # Copy uploaded files to working directory
+        for file_path in file_paths:
+            filename = os.path.basename(file_path)
+            shutil.copy2(file_path, os.path.join(work_dir, filename))
+        
+        # Run the three existing analysis functions on the working directory
+        aria_results = analyze_directory(work_dir, output_json=True, json_filename=os.path.join(work_dir, "aria.json"))
+        
+        # For alt tag analysis, create analyzer and run it
+        alt_analyzer = ImageAltAnalyzer()
+        alt_analyzer.analyze_directory(work_dir, recursive=False)
+        alt_results = alt_analyzer.get_results_dict()
+        
+        # Run nesting analysis
+        nesting_results = analyze_nesting_issues(work_dir, output_json=True, json_filename=os.path.join(work_dir, "nesting.json"))
+        
+        # Combine results
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "aria_analysis": aria_results,
+            "alt_tag_analysis": alt_results,
+            "nesting_analysis": nesting_results
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Analysis failed: {str(e)}"
+        }
+    
+    finally:
+        # Cleanup working directory
+        shutil.rmtree(work_dir, ignore_errors=True)

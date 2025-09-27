@@ -30,8 +30,6 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-
-
   useEffect(() => {
     // Get analysis results from sessionStorage
     const storedResults = sessionStorage.getItem('analysisResults');
@@ -53,8 +51,9 @@ export default function Dashboard() {
     }
   }, [router]);
 
-  const processAnalysisResults = (rawResults: BackendAnalysisResponse): AnalysisResults => {
+  const processAnalysisResults = (rawResults: any): AnalysisResults => {
     // Process the raw backend analysis output into dashboard format
+    console.log('Raw results received:', rawResults);
     
     // Calculate scores based on issues found
     const calculateScore = (issues: number, total: number) => {
@@ -62,64 +61,110 @@ export default function Dashboard() {
       return Math.max(0, Math.round(((total - issues) / total) * 100));
     };
 
-    // Extract data from backend analysis
-    const ariaIssues = rawResults.aria?.total_without_aria || 0;
-    const ariaTotal = rawResults.aria?.total_elements || 1;
-    
-    const altTextIssues = rawResults.altText?.images_without_alt || 0;
-    const altTextTotal = rawResults.altText?.total_images || 1;
-    
-    const structureIssues = rawResults.structure?.total_issues || 0;
-    const structureTotal = rawResults.structure?.total_checks || 1;
+    // Handle both combined results and single analysis type
+    const urlAnalysis = rawResults.data?.url_analysis || null;
+    const fileAnalysis = rawResults.data?.file_analysis || rawResults.data; // fallback for backwards compatibility
+
+    // Extract data from file analysis (code_analyzer results)
+    let ariaIssues = 0;
+    let ariaTotal = 1;
+    let ariaDetails: any[] = [];
+
+    if (fileAnalysis?.aria_analysis && !fileAnalysis.aria_analysis.error) {
+      ariaIssues = fileAnalysis.aria_analysis.summary?.total_elements_without_aria || 0;
+      ariaTotal = fileAnalysis.aria_analysis.summary?.total_interactive_elements || 1;
+      ariaDetails = fileAnalysis.aria_analysis.missing_aria_elements || [];
+    }
+
+    let altTextIssues = 0;
+    let altTextTotal = 1;
+    let altTextDetails: any[] = [];
+
+    if (fileAnalysis?.alt_tag_analysis) {
+      altTextIssues = fileAnalysis.alt_tag_analysis.summary?.images_without_alt || 0;
+      altTextTotal = fileAnalysis.alt_tag_analysis.summary?.total_images || 1;
+      altTextDetails = fileAnalysis.alt_tag_analysis.all_missing_tags || [];
+    }
+
+    let structureIssues = 0;
+    let structureTotal = 1;
+    let structureDetails: any[] = [];
+
+    if (fileAnalysis?.nesting_analysis) {
+      structureIssues = fileAnalysis.nesting_analysis.summary?.total_issues_found || 0;
+      structureTotal = fileAnalysis.nesting_analysis.summary?.total_files_analyzed || 1;
+      structureDetails = fileAnalysis.nesting_analysis.issues || [];
+    }
 
     const aria = {
       score: calculateScore(ariaIssues, ariaTotal),
       issues: ariaIssues,
-      details: rawResults.aria?.missing_elements || []
+      details: ariaDetails
     };
 
     const altText = {
       score: calculateScore(altTextIssues, altTextTotal),
       issues: altTextIssues,
-      details: rawResults.altText?.details || []
+      details: altTextDetails
     };
 
     const structure = {
       score: calculateScore(structureIssues, structureTotal),
       issues: structureIssues,
-      details: rawResults.structure?.issues || []
+      details: structureDetails
     };
 
     // Calculate overall score
     const overallScore = Math.round((aria.score + altText.score + structure.score) / 3);
 
-    // Handle both single screenshot (legacy) and multiple screenshots
+    // Extract file names from analysis
+    let files: string[] = [];
+    if (fileAnalysis?.nesting_analysis?.files) {
+      files = fileAnalysis.nesting_analysis.files.map((f: any) => f.filename);
+    } else if (fileAnalysis?.aria_analysis?.files) {
+      files = fileAnalysis.aria_analysis.files.map((f: any) => f.filename);
+    }
+    
+    // Add URL to files list if we have URL analysis
+    if (urlAnalysis && rawResults.data?.url_analysis) {
+      const urlString = typeof rawResults.data.url_analysis === 'object' ? 'Website Analysis' : rawResults.data.url_analysis;
+      files.unshift(urlString);
+    }
+    
+    // Fallback if no files found
+    if (files.length === 0) {
+      files = ['Unknown files'];
+    }
+
+    // Handle screenshots - prioritize URL analysis screenshots, fallback to placeholder
     let screenshots: Screenshot[] = [];
     
-    if (rawResults.screenshots && Array.isArray(rawResults.screenshots)) {
-      // New format with multiple screenshots
-      screenshots = rawResults.screenshots;
+    if (urlAnalysis?.screenshots && Array.isArray(urlAnalysis.screenshots)) {
+      screenshots = urlAnalysis.screenshots;
     } else {
-      // Fallback placeholder when no screenshots available
+      // Fallback placeholder
       screenshots = [{
         url: '/tarey.jpeg',
-        title: 'Main Page',
+        title: fileAnalysis ? 'Code Analysis Results' : 'Analysis Results',
         issues: [
           { x: 120, y: 200, type: 'Missing ARIA label' },
           { x: 300, y: 450, type: 'No alt text' },
-          { x: 800, y: 150, type: 'Poor contrast' }
+          { x: 800, y: 150, type: 'Nesting issues' }
         ]
       }];
     }
 
-    return {
+    const result = {
       overallScore,
       aria,
       altText,
       structure,
-      files: rawResults.files || ['Unknown files'],
+      files,
       screenshots
     };
+
+    console.log('Processed analysis results:', result);
+    return result;
   };
 
   const handleNewAnalysis = () => {
