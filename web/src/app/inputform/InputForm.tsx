@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function InputForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const router = useRouter();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -52,20 +54,21 @@ export default function InputForm() {
         formData.append('files', file);
       });
 
-      const response = await fetch('/api/upload', {
+      // First analyze the files
+      const analyzeResponse = await fetch('/api/analyze', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+      if (!analyzeResponse.ok) {
+        throw new Error('Analysis failed. Please try again.');
       }
 
-      // Clear form and show success message
+      // Redirect to loading page
+      router.push('/loading');
+
+      // Clear form
       setFiles([]);
-      setError('Files uploaded successfully!');
       
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Upload failed');
