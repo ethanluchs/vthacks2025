@@ -1,51 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-    try {
-        const formData = await request.formData();
-        const files = formData.getAll('files');
-        const url = formData.get('url')?.toString();
+export async function POST(req: Request) {
+  const backend = process.env.BACKEND_SERVICE_URL || 'http://localhost:8000';
+  const contentType = req.headers.get('content-type') || '';
+  const forwardUrl = `${backend}/analyze`;
+  let forwardOptions: RequestInit = { method: 'POST' };
 
-        if (files.length === 0 && !url) {
-            return NextResponse.json(
-                { error: 'No files or URL provided' },
-                { status: 400 }
-            );
-        }
+  if (contentType.includes('application/json')) {
+    const json = await req.json();
+    forwardOptions.headers = { 'Content-Type': 'application/json' };
+    forwardOptions.body = JSON.stringify(json);
+  } else {
+    const formData = await req.formData();
+    forwardOptions.body = formData as any;
+  }
 
-        // Get backend service URL from environment
-        const backendUrl = process.env.BACKEND_SERVICE_URL || 'http://localhost:8000';
-        
-        // Forward the FormData to the backend service
-        const backendResponse = await fetch(`${backendUrl}/analyze`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!backendResponse.ok) {
-            const errorText = await backendResponse.text();
-            console.error('Backend service error:', errorText);
-            return NextResponse.json(
-                { error: 'Backend analysis service unavailable' },
-                { status: 502 }
-            );
-        }
-
-        const analysisResult = await backendResponse.json();
-        return NextResponse.json(analysisResult);
-        
-    } catch (error) {
-        console.error('Analysis error:', error);
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            return NextResponse.json(
-                { error: 'Cannot connect to analysis service. Please try again later.' },
-                { status: 503 }
-            );
-        }
-        return NextResponse.json(
-            { error: 'Failed to analyze files: ' + (error instanceof Error ? error.message : 'Unknown error') },
-            { status: 500 }
-        );
-    }
+  const resp = await fetch(forwardUrl, forwardOptions);
+  const text = await resp.text();
+  try {
+    return NextResponse.json(JSON.parse(text), { status: resp.status });
+  } catch {
+    return new NextResponse(text, { status: resp.status });
+  }
 }
 

@@ -4,3 +4,11 @@ python-multipart==0.0.6
 selenium==4.15.0
 beautifulsoup4==4.12.2
 opencv-python==4.8.1.78
+
+# Added libs required by contrast_detection.py
+numpy>=1.26,<2
+pillow>=10.0.0
+pytesseract==0.3.13
+
+# Playwright (Python) for page rendering; pin or bump as needed
+playwright>=1.36.0
