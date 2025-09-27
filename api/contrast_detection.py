@@ -7,6 +7,9 @@ import time
 import base64
 import tempfile
 import os
+import math
+import shutil
+import uuid
 
 # render page and get screenshot
 def capture_screenshot(url, screenshot_path="screenshot.png"):
@@ -155,29 +158,102 @@ def _img_to_data_url(path):
     with open(path, "rb") as f:
         return "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
 
-def analyze_url(url, tmp_dir=None):
+def split_image_vertically(image_path, tmp_dir, max_height=1080):
+    """
+    Split an image vertically into segments each with height <= max_height.
+    Returns list of segment file paths (in tmp_dir) in top->bottom order.
+    """
+    img = Image.open(image_path)
+    w, h = img.size
+    if h <= max_height:
+        return [image_path]
+
+    segments = []
+    parts = math.ceil(h / max_height)
+    base = os.path.splitext(os.path.basename(image_path))[0]
+    for i in range(parts):
+        top = i * max_height
+        bottom = min((i + 1) * max_height, h)
+        segment = img.crop((0, top, w, bottom))
+        seg_path = os.path.join(tmp_dir, f"{base}_part{i+1}.png")
+        segment.save(seg_path)
+        segments.append(seg_path)
+    return segments
+
+# Directory under the Next.js app's public/ so files are served at /analysis_images/<file>
+PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+PUBLIC_IMAGES_DIR = os.path.join(PROJECT_ROOT, 'web', 'public', 'analysis_images')
+os.makedirs(PUBLIC_IMAGES_DIR, exist_ok=True)
+
+def save_to_public(src_path, public_dir=PUBLIC_IMAGES_DIR, prefix='annotated', prefer_jpeg=False, jpeg_quality=80):
+    """
+    Copy/convert src_path into the project's web/public/analysis_images folder
+    and return the relative URL path (e.g. /analysis_images/<filename>).
+    Uses a uuid to avoid collisions.
+    """
+    ext = os.path.splitext(src_path)[1].lower()
+    # choose extension
+    if prefer_jpeg and ext not in ('.jpg', '.jpeg'):
+        out_ext = '.jpg'
+    else:
+        out_ext = ext if ext in ('.png', '.jpg', '.jpeg') else '.png'
+
+    name = f"{prefix}_{uuid.uuid4().hex}{out_ext}"
+    dst = os.path.join(public_dir, name)
+
+    try:
+        img = Image.open(src_path).convert("RGB")
+        if out_ext in ('.jpg', '.jpeg'):
+            img.save(dst, format='JPEG', quality=jpeg_quality, optimize=True)
+        else:
+            img.save(dst, format='PNG', optimize=True)
+    except Exception:
+        # fallback to direct copy if Pillow save fails
+        shutil.copy2(src_path, dst)
+
+    return f"/analysis_images/{name}"
+
+def analyze_url(url, tmp_dir=None, max_segment_height=1080):
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
     screenshot_path = os.path.join(tmp_dir, "screenshot.png")
     capture_screenshot(url, screenshot_path)
-    boxes = detect_text_regions(screenshot_path)
-    annotated_path, issues = analyze_contrast(screenshot_path, boxes, out_path=os.path.join(tmp_dir, "annotated.png"))
+
+    segment_paths = split_image_vertically(screenshot_path, tmp_dir, max_height=max_segment_height)
+    screenshots = []
+    for idx, seg_path in enumerate(segment_paths, start=1):
+        boxes = detect_text_regions(seg_path)
+        annotated_path, issues = analyze_contrast(seg_path, boxes, out_path=os.path.join(tmp_dir, f"annotated_part{idx}.png"))
+        public_url = save_to_public(annotated_path, prefix=f"mainpage_part{idx}")
+        screenshots.append({
+            "url": public_url,
+            "title": f"Main Page (part {idx}/{len(segment_paths)})",
+            "issues": issues
+        })
+
     return {
         "files": [],
-        "screenshots": [{"url": _img_to_data_url(annotated_path), "title": "Main Page", "issues": issues}],
+        "screenshots": screenshots,
         "aria": {}, "altText": {}, "structure": {}
     }
 
-def analyze_files(file_paths, tmp_dir=None):
+def analyze_files(file_paths, tmp_dir=None, max_segment_height=1080):
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
     screenshots = []
-    for i, p in enumerate(file_paths):
-        boxes = detect_text_regions(p)
-        annotated_path, issues = analyze_contrast(p, boxes, out_path=os.path.join(tmp_dir, f"annotated_{i}.png"))
-        screenshots.append({"url": _img_to_data_url(annotated_path), "title": os.path.basename(p), "issues": issues})
-    return {"files": [os.path.basename(p) for p in file_paths], "screenshots": screenshots, "aria": {}, "altText": {}, "structure": {}}
-# ...existing code...
+    all_files = []
+    for p in file_paths:
+        seg_paths = split_image_vertically(p, tmp_dir, max_height=max_segment_height)
+        for idx, seg in enumerate(seg_paths, start=1):
+            annotated_path, issues = analyze_contrast(seg, detect_text_regions(seg), out_path=os.path.join(tmp_dir, f"annotated_{os.path.basename(p)}_part{idx}.png"))
+            public_url = save_to_public(annotated_path, prefix=f"{os.path.splitext(os.path.basename(p))[0]}_part{idx}")
+            screenshots.append({
+                "url": public_url,
+                "title": f"{os.path.basename(p)} (part {idx}/{len(seg_paths)})",
+                "issues": issues
+            })
+        all_files.append(os.path.basename(p))
+    return {"files": all_files, "screenshots": screenshots, "aria": {}, "altText": {}, "structure": {}}
 
 # ---------- Run the pipeline ----------
 if __name__ == "__main__":
