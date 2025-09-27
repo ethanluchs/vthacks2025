@@ -4,6 +4,9 @@ import pytesseract
 from playwright.sync_api import sync_playwright
 from PIL import Image, ImageDraw
 import time
+import base64
+import tempfile
+import os
 
 # render page and get screenshot
 def capture_screenshot(url, screenshot_path="screenshot.png"):
@@ -114,43 +117,67 @@ def contrast_ratio(fg, bg):
     return (L1 + 0.05) / (L2 + 0.05)
 
 # analyze contrast of each text box
-def analyze_contrast(image_path, boxes, out_path="annotated.png"):
+def analyze_contrast(image_path, boxes, out_path="annotated.png", wcag_threshold=4.5):
     img = Image.open(image_path).convert("RGB")
     draw = ImageDraw.Draw(img)
+
+    issues = []
 
     for (x, y, w, h, text) in boxes:
         region = img.crop((x, y, x+w, y+h))
         arr = np.array(region)
 
-        # Convert to grayscale for thresholding
         gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        # Adaptive threshold → separate text vs background pixels
-        _, mask = cv2.threshold(gray, 0, 255,
-                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # Boolean masks for text vs background
-        text_pixels = arr[mask == 0]    # black in mask → text
-        bg_pixels   = arr[mask == 255]  # white in mask → background
+        text_pixels = arr[mask == 0]
+        bg_pixels   = arr[mask == 255]
 
         if len(text_pixels) == 0 or len(bg_pixels) == 0:
-            continue  # skip weird cases
+            continue
 
-        # Median colors
         fg_color = np.median(text_pixels, axis=0)
         bg_color = np.median(bg_pixels, axis=0)
-
-        # Contrast ratio
         ratio = contrast_ratio(fg_color, bg_color)
 
-        if ratio < 10:  # WCAG AA threshold for normal text
+        if ratio < wcag_threshold:
+            issues.append({
+                "x": int(x), "y": int(y), "w": int(w), "h": int(h),
+                "type": "low_contrast", "ratio": float(ratio), "text": text
+            })
             draw.rectangle([x, y, x+w, y+h], outline="red", width=3)
             draw.text((x, y-12), f"{ratio:.2f}", fill="red")
 
     img.save(out_path)
-    return out_path
+    return out_path, issues
 
+def _img_to_data_url(path):
+    with open(path, "rb") as f:
+        return "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
 
+def analyze_url(url, tmp_dir=None):
+    if tmp_dir is None:
+        tmp_dir = tempfile.mkdtemp()
+    screenshot_path = os.path.join(tmp_dir, "screenshot.png")
+    capture_screenshot(url, screenshot_path)
+    boxes = detect_text_regions(screenshot_path)
+    annotated_path, issues = analyze_contrast(screenshot_path, boxes, out_path=os.path.join(tmp_dir, "annotated.png"))
+    return {
+        "files": [],
+        "screenshots": [{"url": _img_to_data_url(annotated_path), "title": "Main Page", "issues": issues}],
+        "aria": {}, "altText": {}, "structure": {}
+    }
+
+def analyze_files(file_paths, tmp_dir=None):
+    if tmp_dir is None:
+        tmp_dir = tempfile.mkdtemp()
+    screenshots = []
+    for i, p in enumerate(file_paths):
+        boxes = detect_text_regions(p)
+        annotated_path, issues = analyze_contrast(p, boxes, out_path=os.path.join(tmp_dir, f"annotated_{i}.png"))
+        screenshots.append({"url": _img_to_data_url(annotated_path), "title": os.path.basename(p), "issues": issues})
+    return {"files": [os.path.basename(p) for p in file_paths], "screenshots": screenshots, "aria": {}, "altText": {}, "structure": {}}
+# ...existing code...
 
 # ---------- Run the pipeline ----------
 if __name__ == "__main__":

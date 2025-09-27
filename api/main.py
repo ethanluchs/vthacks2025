@@ -1,11 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from typing import List, Optional
-import tempfile
-import os
-import asyncio
+import tempfile, os, asyncio
 from fastapi.middleware.cors import CORSMiddleware
-
-from . import contrast_detection  # relative import within package
+import contrast_detection
 
 
 # Create FastAPI app instance
@@ -40,14 +37,14 @@ async def analyze(url: Optional[str] = Form(None), files: Optional[List[UploadFi
             return result
 
         # handle uploaded files: save to tmp_dir then analyze
-        saved_paths = []
+        saved = []
         for up in files:
             dest = os.path.join(tmp_dir, up.filename)
             with open(dest, "wb") as f:
                 f.write(await up.read())
-            saved_paths.append(dest)
+            saved.append(dest)
 
-        result = await asyncio.to_thread(contrast_detection.analyze_files, saved_paths, tmp_dir)
+        result = await asyncio.to_thread(contrast_detection.analyze_files, saved, tmp_dir)
         return result
 
     finally:
