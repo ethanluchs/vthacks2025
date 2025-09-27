@@ -1,0 +1,51 @@
+{
+  "analysis_timestamp": "2025-09-27T14:30:25.839865",
+  "summary": {
+    "total_images": 10,
+    "images_without_alt": 1,
+    "percentage_without_alt": 10.0
+  },
+  "file_details": [
+    {
+      "filename": "ethanWebsite.html",
+      "file_type": "html",
+      "total_images": 8,
+      "images_without_alt": 0,
+      "percentage_without_alt": 0.0,
+      "missing_alt_tags": []
+    },
+    {
+      "filename": "images.html",
+      "file_type": "html",
+      "total_images": 2,
+      "images_without_alt": 1,
+      "percentage_without_alt": 50.0,
+      "missing_alt_tags": [
+        "<img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>"
+      ]
+    },
+    {
+      "filename": "test2.html",
+      "file_type": "html",
+      "total_images": 0,
+      "images_without_alt": 0,
+      "percentage_without_alt": 0,
+      "missing_alt_tags": []
+    }
+  ],
+  "all_missing_tags": [
+    {
+      "filename": "images.html",
+      "file_type": "html",
+      "tags": [
+        "<img src=\"https://via.placeholder.com/300x200/2196F3/white?text=Image+2\"/>"
+      ]
+    }
+  ],
+  "notes": [
+    "Empty alt='' attributes are considered valid (for decorative images)",
+    "Only completely missing alt attributes are counted as violations",
+    "For JavaScript files, dynamic image creation patterns are detected",
+    "Image tags show the actual HTML found in the files"
+  ]
+}

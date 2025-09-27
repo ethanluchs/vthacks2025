@@ -1,0 +1,52 @@
+{
+  "analysis_date": "2025-09-27T14:30:25.841383",
+  "directory": ".",
+  "summary": {
+    "total_files_analyzed": 3,
+    "total_files_with_issues": 1,
+    "total_issues_found": 1,
+    "issues_by_type": {
+      "HTML_IMPROPER_NESTING": 1
+    }
+  },
+  "files": [
+    {
+      "filename": "ethanWebsite.html",
+      "file_path": ".\\ethanWebsite.html",
+      "file_type": ".html",
+      "issues_count": 0,
+      "issues": []
+    },
+    {
+      "filename": "images.html",
+      "file_path": ".\\images.html",
+      "file_type": ".html",
+      "issues_count": 1,
+      "issues": [
+        {
+          "type": "HTML_IMPROPER_NESTING",
+          "line": 40,
+          "message": "Invalid nesting: <p> inside <p>",
+          "code": "<p class=\"description\">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>"
+        }
+      ]
+    },
+    {
+      "filename": "test2.html",
+      "file_path": ".\\test2.html",
+      "file_type": ".html",
+      "issues_count": 0,
+      "issues": []
+    }
+  ],
+  "issues": [
+    {
+      "filename": "images.html",
+      "file_path": ".\\images.html",
+      "line": 40,
+      "type": "HTML_IMPROPER_NESTING",
+      "message": "Invalid nesting: <p> inside <p>",
+      "code": "<p class=\"description\">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>"
+    }
+  ]
+}

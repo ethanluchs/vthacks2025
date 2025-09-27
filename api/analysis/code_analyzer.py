@@ -2,6 +2,8 @@ from bs4 import BeautifulSoup
 import os
 import re
 from pathlib import Path
+import json
+from datetime import datetime
 import argparse
 import glob
 
@@ -87,81 +89,138 @@ def get_element_line_context(html_content, element_html):
     # Return the element HTML itself as fallback
     return f"Element: {element_html}"
 
-def analyze_directory(directory_path):
+def analyze_directory(directory_path=".", output_json=True, json_filename="aria_issues.json"):
     """
     Analyze all HTML files in a directory
     """
+    import json
+    from datetime import datetime
+    
     html_files = glob.glob(os.path.join(directory_path, "*.html"))
     
     if not html_files:
-        print("No HTML files found in the directory")
-        return
+        message = "No HTML files found in the directory"
+        if not output_json:
+            print(message)
+        return {"error": message}
     
     total_elements_all_files = 0
     total_without_aria_all_files = 0
     overall_missing_by_type = {}
     all_missing_elements = []
     
-    print("📋 ARIA Label Analysis Results")
-    print("=" * 50)
+    results = {
+        "analysis_date": datetime.now().isoformat(),
+        "directory": directory_path,
+        "summary": {},
+        "files": [],
+        "missing_aria_elements": []
+    }
+    
+    if not output_json:
+        print("📋 ARIA Label Analysis Results")
+        print("=" * 50)
     
     for html_file in html_files:
         percentage, without_aria, total, missing_by_type, missing_elements = check_aria_labels(html_file)
         filename = os.path.basename(html_file)
         
-        print(f"\n📄 {filename}")
-        print(f"   Total interactive elements: {total}")
-        print(f"   Elements without aria labels: {without_aria}")
-        print(f"   Percentage without aria: {percentage:.1f}%")
+        file_result = {
+            "filename": filename,
+            "file_path": html_file,
+            "total_interactive_elements": total,
+            "elements_without_aria": without_aria,
+            "percentage_without_aria": round(percentage, 1),
+            "missing_by_type": missing_by_type,
+            "missing_elements": missing_elements
+        }
         
-        # Show breakdown by element type for this file
-        if missing_by_type:
-            print(f"   Missing aria labels by type:")
-            for element_type, count in missing_by_type.items():
-                print(f"     - {element_type}: {count}")
-        
-        # Show the actual code lines for missing elements
-        if missing_elements:
-            print(f"\n   🚨 ELEMENTS MISSING ARIA LABELS:")
-            for i, element_info in enumerate(missing_elements, 1):
-                print(f"     {i}. [{element_info['type']}] {element_info['context']}")
+        if not output_json:
+            print(f"\n📄 {filename}")
+            print(f"   Total interactive elements: {total}")
+            print(f"   Elements without aria labels: {without_aria}")
+            print(f"   Percentage without aria: {percentage:.1f}%")
+            
+            # Show breakdown by element type for this file
+            if missing_by_type:
+                print(f"   Missing aria labels by type:")
+                for element_type, count in missing_by_type.items():
+                    print(f"     - {element_type}: {count}")
+            
+            # Show the actual code lines for missing elements
+            if missing_elements:
+                print(f"\n   🚨 ELEMENTS MISSING ARIA LABELS:")
+                for i, element_info in enumerate(missing_elements, 1):
+                    print(f"     {i}. [{element_info['type']}] {element_info['context']}")
         
         # Add to overall totals
         total_elements_all_files += total
         total_without_aria_all_files += without_aria
         all_missing_elements.extend([(filename, elem) for elem in missing_elements])
         
+        # Add to results
+        for element_info in missing_elements:
+            results["missing_aria_elements"].append({
+                "filename": filename,
+                "file_path": html_file,
+                "element_type": element_info["type"],
+                "element_html": element_info["html"],
+                "context": element_info["context"]
+            })
+        
         # Combine element type counts
         for element_type, count in missing_by_type.items():
             overall_missing_by_type[element_type] = overall_missing_by_type.get(element_type, 0) + count
+        
+        results["files"].append(file_result)
     
-    # Overall statistics
-    if total_elements_all_files > 0:
-        overall_percentage = (total_without_aria_all_files / total_elements_all_files) * 100
-        print(f"\n🎯 OVERALL RESULTS")
-        print(f"   Total elements across all files: {total_elements_all_files}")
-        print(f"   Elements without aria labels: {total_without_aria_all_files}")
-        print(f"   Overall percentage without aria: {overall_percentage:.1f}%")
-        
-        # Show overall breakdown by element type
-        if overall_missing_by_type:
-            print(f"\n🔍 ELEMENTS MISSING ARIA LABELS BY TYPE:")
-            for element_type, count in sorted(overall_missing_by_type.items()):
-                print(f"   - {count} {element_type}(s)")
+    # Generate summary
+    overall_percentage = (total_without_aria_all_files / total_elements_all_files * 100) if total_elements_all_files > 0 else 0
+    
+    results["summary"] = {
+        "total_files_analyzed": len(html_files),
+        "total_files_with_issues": len([f for f in results["files"] if f["elements_without_aria"] > 0]),
+        "total_interactive_elements": total_elements_all_files,
+        "total_elements_without_aria": total_without_aria_all_files,
+        "overall_percentage_without_aria": round(overall_percentage, 1),
+        "missing_by_element_type": overall_missing_by_type
+    }
+    
+    if output_json:
+        # Save to JSON file
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"✅ ARIA analysis results saved to {json_filename}")
+        return results
+    else:
+        # Display summary
+        if total_elements_all_files > 0:
+            print(f"\n🎯 OVERALL RESULTS")
+            print(f"   Total elements across all files: {total_elements_all_files}")
+            print(f"   Elements without aria labels: {total_without_aria_all_files}")
+            print(f"   Overall percentage without aria: {overall_percentage:.1f}%")
             
-            print(f"\n📊 DETAILED BREAKDOWN:")
-            for element_type, count in sorted(overall_missing_by_type.items()):
-                percentage_of_missing = (count / total_without_aria_all_files) * 100
-                print(f"   - {element_type}: {count} ({percentage_of_missing:.1f}% of all missing aria labels)")
+            # Show overall breakdown by element type
+            if overall_missing_by_type:
+                print(f"\n🔍 ELEMENTS MISSING ARIA LABELS BY TYPE:")
+                for element_type, count in sorted(overall_missing_by_type.items()):
+                    print(f"   - {count} {element_type}(s)")
+                
+                print(f"\n📊 DETAILED BREAKDOWN:")
+                for element_type, count in sorted(overall_missing_by_type.items()):
+                    percentage_of_missing = (count / total_without_aria_all_files) * 100
+                    print(f"   - {element_type}: {count} ({percentage_of_missing:.1f}% of all missing aria labels)")
+            
+            # Show all missing elements across all files
+            if all_missing_elements:
+                print(f"\n🚨 ALL ELEMENTS MISSING ARIA LABELS:")
+                print("=" * 60)
+                for i, (filename, element_info) in enumerate(all_missing_elements, 1):
+                    print(f"{i:2d}. [{element_info['type']}] in {filename}")
+                    print(f"    {element_info['context']}")
+                    print()
         
-        # Show all missing elements across all files
-        if all_missing_elements:
-            print(f"\n🚨 ALL ELEMENTS MISSING ARIA LABELS:")
-            print("=" * 60)
-            for i, (filename, element_info) in enumerate(all_missing_elements, 1):
-                print(f"{i:2d}. [{element_info['type']}] in {filename}")
-                print(f"    {element_info['context']}")
-                print()
+        return results
 
 # Analyzing Images for Alt Tags
 class ImageAltAnalyzer:
@@ -178,6 +237,7 @@ class ImageAltAnalyzer:
             
             file_total = len(img_tags)
             file_without_alt = 0
+            missing_alt_tags = []
             
             for img in img_tags:
                 alt_attr = img.get('alt')
@@ -185,6 +245,8 @@ class ImageAltAnalyzer:
                 # Only count as missing if alt attribute is completely absent
                 if alt_attr is None:
                     file_without_alt += 1
+                    # Store the actual img tag as string
+                    missing_alt_tags.append(str(img))
             
             self.total_images += file_total
             self.images_without_alt += file_without_alt
@@ -193,7 +255,9 @@ class ImageAltAnalyzer:
                 'filename': filename,
                 'total_images': file_total,
                 'without_alt': file_without_alt,
-                'percentage': (file_without_alt / file_total * 100) if file_total > 0 else 0
+                'percentage': (file_without_alt / file_total * 100) if file_total > 0 else 0,
+                'missing_alt_tags': missing_alt_tags,
+                'file_type': 'html'
             })
             
         except Exception as e:
@@ -203,27 +267,39 @@ class ImageAltAnalyzer:
         """Analyze JavaScript content for dynamically created img elements"""
         # Look for patterns like: createElement('img'), new Image(), innerHTML with <img>
         patterns = [
-            r'createElement\s*\(\s*[\'"]img[\'"]\s*\)',
-            r'new\s+Image\s*\(\s*\)',
-            r'innerHTML\s*[+]?=\s*[\'"][^\'\"]*<img[^>]*>[^\'\"]*[\'"]',
-            r'insertAdjacentHTML\s*\([^)]*[\'"][^\'\"]*<img[^>]*>[^\'\"]*[\'"]\)',
+            (r'createElement\s*\(\s*[\'"]img[\'"]\s*\)', 'createElement'),
+            (r'new\s+Image\s*\(\s*\)', 'new Image'),
+            (r'innerHTML\s*[+]?=\s*[\'"]([^\'\"]*<img[^>]*>)[^\'\"]*[\'"]', 'innerHTML'),
+            (r'insertAdjacentHTML\s*\([^)]*[\'"]([^\'\"]*<img[^>]*>)[^\'\"]*[\'"]\)', 'insertAdjacentHTML'),
         ]
         
         js_images = 0
         js_without_alt = 0
+        missing_alt_tags = []
         
-        for pattern in patterns:
+        for pattern, pattern_type in patterns:
             matches = re.finditer(pattern, content, re.IGNORECASE | re.DOTALL)
             for match in matches:
                 js_images += 1
-                # For innerHTML patterns, check if alt attribute is present
-                if 'innerHTML' in match.group() or 'insertAdjacentHTML' in match.group():
-                    if 'alt=' not in match.group().lower():
+                
+                if pattern_type in ['innerHTML', 'insertAdjacentHTML']:
+                    # Extract the img tag from the captured group
+                    img_html = match.group(1) if match.groups() else match.group()
+                    if 'alt=' not in img_html.lower():
                         js_without_alt += 1
+                        missing_alt_tags.append({
+                            'type': pattern_type,
+                            'img_tag': img_html.strip(),
+                            'full_match': match.group().strip()
+                        })
                 else:
                     # createElement and new Image() don't automatically have alt
-                    # We'd need more sophisticated analysis to determine if alt is added later
                     js_without_alt += 1
+                    missing_alt_tags.append({
+                        'type': pattern_type,
+                        'img_tag': f"Dynamic image creation: {pattern_type}",
+                        'full_match': match.group().strip()
+                    })
         
         if js_images > 0:
             self.total_images += js_images
@@ -233,7 +309,9 @@ class ImageAltAnalyzer:
                 'filename': filename,
                 'total_images': js_images,
                 'without_alt': js_without_alt,
-                'percentage': (js_without_alt / js_images * 100) if js_images > 0 else 0
+                'percentage': (js_without_alt / js_images * 100) if js_images > 0 else 0,
+                'missing_alt_tags': missing_alt_tags,
+                'file_type': 'javascript'
             })
 
     def analyze_directory(self, directory_path, recursive=True):
@@ -293,6 +371,56 @@ class ImageAltAnalyzer:
             except Exception as e:
                 print(f"Error reading {file_path}: {e}")
 
+    def get_results_dict(self):
+        """Get results as a dictionary for JSON export"""
+        overall_percentage = (self.images_without_alt / self.total_images * 100) if self.total_images > 0 else 0
+        
+        return {
+            "analysis_timestamp": datetime.now().isoformat(),
+            "summary": {
+                "total_images": self.total_images,
+                "images_without_alt": self.images_without_alt,
+                "percentage_without_alt": round(overall_percentage, 2)
+            },
+            "file_details": [
+                {
+                    "filename": result['filename'],
+                    "file_type": result.get('file_type', 'unknown'),
+                    "total_images": result['total_images'],
+                    "images_without_alt": result['without_alt'],
+                    "percentage_without_alt": round(result['percentage'], 2),
+                    "missing_alt_tags": result.get('missing_alt_tags', [])
+                }
+                for result in self.file_results
+            ],
+            "all_missing_tags": [
+                {
+                    "filename": result['filename'],
+                    "file_type": result.get('file_type', 'unknown'),
+                    "tags": result.get('missing_alt_tags', [])
+                }
+                for result in self.file_results
+                if result.get('missing_alt_tags')
+            ],
+            "notes": [
+                "Empty alt='' attributes are considered valid (for decorative images)",
+                "Only completely missing alt attributes are counted as violations",
+                "For JavaScript files, dynamic image creation patterns are detected",
+                "Image tags show the actual HTML found in the files"
+            ]
+        }
+
+    def save_to_json(self, output_file):
+        """Save results to JSON file"""
+        results = self.get_results_dict()
+        
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(results, f, indent=2, ensure_ascii=False)
+            print(f"Results saved to {output_file}")
+        except Exception as e:
+            print(f"Error saving to JSON file: {e}")
+
     def print_results(self, detailed=False):
         """Print analysis results"""
         print("\n" + "="*60)
@@ -308,6 +436,17 @@ class ImageAltAnalyzer:
                           f"Total: {result['total_images']:>3} | "
                           f"Missing alt: {result['without_alt']:>3} | "
                           f"Percentage: {result['percentage']:>6.1f}%")
+                    
+                    # Show missing alt tags if detailed view is requested
+                    missing_tags = result.get('missing_alt_tags', [])
+                    if missing_tags:
+                        print(f"  Missing alt tags:")
+                        for i, tag in enumerate(missing_tags, 1):
+                            if isinstance(tag, dict):  # JavaScript tags
+                                print(f"    {i}. [{tag['type']}] {tag['img_tag']}")
+                            else:  # HTML tags
+                                print(f"    {i}. {tag}")
+                        print()
         
         print(f"\nOVERALL SUMMARY:")
         print(f"Total images found: {self.total_images}")
@@ -332,6 +471,10 @@ def main():
                        help='Don\'t analyze subdirectories recursively')
     parser.add_argument('--detailed', action='store_true',
                        help='Show per-file breakdown')
+    parser.add_argument('--json', metavar='OUTPUT_FILE',
+                       help='Save results to JSON file (e.g., --json results.json)')
+    parser.add_argument('--json-only', metavar='OUTPUT_FILE',
+                       help='Save to JSON and suppress console output')
     
     args = parser.parse_args()
     
@@ -342,7 +485,20 @@ def main():
     else:
         analyzer.analyze_directory(args.path, recursive=not args.no_recursive)
     
-    analyzer.print_results(detailed=args.detailed)
+    # Generate automatic JSON filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    auto_json_filename = f"img_alt_analysis.json"
+    
+    # Handle JSON output
+    if args.json_only:
+        analyzer.save_to_json(args.json_only)
+    elif args.json:
+        analyzer.print_results(detailed=args.detailed)
+        analyzer.save_to_json(args.json)
+    else:
+        # Always show console output and save to automatic JSON file
+        analyzer.print_results(detailed=args.detailed)
+        analyzer.save_to_json(auto_json_filename)
 
 # Test for Nesting
 def check_html_nesting(file_path):
@@ -592,15 +748,26 @@ def find_element_line_number(html_content, element_html):
     
     return 1  # Fallback
 
-def analyze_nesting_issues(directory_path="."):
+def analyze_nesting_issues(directory_path=".", output_json=True, json_filename="nesting_issues.json"):
     """
     Analyze all HTML, CSS, and JS files for nesting issues
     """
+    import json
+    from datetime import datetime
+    
     file_patterns = ["*.html", "*.css", "*.js"]
     all_issues = []
+    results = {
+        "analysis_date": datetime.now().isoformat(),
+        "directory": directory_path,
+        "summary": {},
+        "files": [],
+        "issues": []
+    }
     
-    print("🔍 NESTING ANALYSIS RESULTS")
-    print("=" * 60)
+    if not output_json:
+        print("🔍 NESTING ANALYSIS RESULTS")
+        print("=" * 60)
     
     for pattern in file_patterns:
         files = glob.glob(os.path.join(directory_path, pattern))
@@ -609,8 +776,17 @@ def analyze_nesting_issues(directory_path="."):
             filename = os.path.basename(file_path)
             file_extension = os.path.splitext(filename)[1].lower()
             
-            print(f"\n📄 Analyzing {filename}")
-            print("-" * 40)
+            file_result = {
+                "filename": filename,
+                "file_path": file_path,
+                "file_type": file_extension,
+                "issues_count": 0,
+                "issues": []
+            }
+            
+            if not output_json:
+                print(f"\n📄 Analyzing {filename}")
+                print("-" * 40)
             
             issues = []
             
@@ -622,39 +798,78 @@ def analyze_nesting_issues(directory_path="."):
                 elif file_extension == '.js':
                     issues = check_js_nesting(file_path)
                 
+                file_result["issues_count"] = len(issues)
+                file_result["issues"] = issues
+                
                 if issues:
-                    print(f"   ❌ Found {len(issues)} nesting issues:")
-                    for i, issue in enumerate(issues, 1):
-                        print(f"      {i}. Line {issue['line']}: {issue['message']}")
-                        print(f"         Code: {issue['code']}")
-                        print()
+                    if not output_json:
+                        print(f"   ❌ Found {len(issues)} nesting issues:")
+                        for i, issue in enumerate(issues, 1):
+                            print(f"      {i}. Line {issue['line']}: {issue['message']}")
+                            print(f"         Code: {issue['code']}")
+                            print()
+                    
                     all_issues.extend([(filename, issue) for issue in issues])
+                    
+                    # Add to results
+                    for issue in issues:
+                        results["issues"].append({
+                            "filename": filename,
+                            "file_path": file_path,
+                            "line": issue["line"],
+                            "type": issue["type"],
+                            "message": issue["message"],
+                            "code": issue["code"]
+                        })
                 else:
-                    print("   ✅ No nesting issues found")
+                    if not output_json:
+                        print("   ✅ No nesting issues found")
                     
             except Exception as e:
-                print(f"   ⚠️  Error analyzing file: {str(e)}")
+                error_msg = f"Error analyzing file: {str(e)}"
+                if not output_json:
+                    print(f"   ⚠️  {error_msg}")
+                
+                file_result["error"] = error_msg
+            
+            results["files"].append(file_result)
     
-    # Summary
-    if all_issues:
-        print(f"\n📊 SUMMARY")
-        print("=" * 60)
-        print(f"Total files with issues: {len(set(issue[0] for issue in all_issues))}")
-        print(f"Total nesting issues found: {len(all_issues)}")
-        
-        # Group by issue type
-        issue_types = {}
-        for filename, issue in all_issues:
-            issue_type = issue['type']
-            if issue_type not in issue_types:
-                issue_types[issue_type] = []
-            issue_types[issue_type].append((filename, issue))
-        
-        print(f"\nIssues by type:")
-        for issue_type, issues in issue_types.items():
-            print(f"  - {issue_type}: {len(issues)}")
+    # Generate summary
+    issue_types = {}
+    for filename, issue in all_issues:
+        issue_type = issue['type']
+        if issue_type not in issue_types:
+            issue_types[issue_type] = []
+        issue_types[issue_type].append((filename, issue))
+    
+    results["summary"] = {
+        "total_files_analyzed": len(results["files"]),
+        "total_files_with_issues": len(set(issue[0] for issue in all_issues)),
+        "total_issues_found": len(all_issues),
+        "issues_by_type": {issue_type: len(issues) for issue_type, issues in issue_types.items()}
+    }
+    
+    if output_json:
+        # Save to JSON file
+        with open(json_filename, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"✅ Results saved to {json_filename}")
+        return results
     else:
-        print(f"\n✅ No nesting issues found in any files!")
+        # Display summary
+        if all_issues:
+            print(f"\n📊 SUMMARY")
+            print("=" * 60)
+            print(f"Total files with issues: {len(set(issue[0] for issue in all_issues))}")
+            print(f"Total nesting issues found: {len(all_issues)}")
+            
+            print(f"\nIssues by type:")
+            for issue_type, issues in issue_types.items():
+                print(f"  - {issue_type}: {len(issues)}")
+        else:
+            print(f"\n✅ No nesting issues found in any files!")
+        
+        return results
 
 
 # Example usage
