@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Images with and without Alt Tags</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+        .image-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        img {
+            max-width: 300px;
+            height: auto;
+            display: block;
+            margin: 10px 0;
+        }
+        h2 {
+            color: #333;
+        }
+        .description {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>HTML Images Example</h1>
+    
+    <div class="image-container">
+        <h2>Image with Alt Tag</h2>
+        <img src="https://via.placeholder.com/300x200/4CAF50/white?text=Image+1" alt="A green placeholder image with white text showing 'Image 1'">
+        <p class="description">This image <p> secret text inside text here! </p>has an alt attribute for accessibility.</p>
+    </div>
+    
+    <div class="image-container">
+        <h2>Image without Alt Tag</h2>
+        <img src="https://via.placeholder.com/300x200/2196F3/white?text=Image+2">
+        <p class="description">This image does not have an alt attribute.</p>
+    </div>
+    
+</body>
+</html>

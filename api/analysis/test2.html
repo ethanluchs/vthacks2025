@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIA vs Non-ARIA Labels</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .section {
+            border: 2px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .good {
+            border-color: #28a745;
+            background-color: #f8fff9;
+        }
+        
+        .bad {
+            border-color: #dc3545;
+            background-color: #fff8f8;
+        }
+        
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .good button {
+            background: #28a745;
+            color: white;
+        }
+        
+        .bad button {
+            background: #dc3545;
+            color: white;
+        }
+        
+        input, select {
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        h2 {
+            margin-top: 0;
+        }
+        
+        .icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ARIA Labels vs Regular Labels</h1>
+    <p>This page shows the difference between properly formatted ARIA labels and basic labels.</p>
+
+    <!-- Good examples with ARIA -->
+    <div class="section good">
+        <h2>✅ Good - With ARIA Labels</h2>
+        
+        <h3>Buttons</h3>
+        <button aria-label="Save your work">💾 Save</button>
+        <button aria-label="Delete this item permanently">🗑️ Delete</button>
+        <button aria-label="Close this dialog">❌</button>
+        
+        <h3>Form Elements</h3>
+        <label for="good-name">Name:</label>
+        <input type="text" id="good-name" aria-required="true" aria-describedby="name-help">
+        <div id="name-help">Enter your full name</div>
+        
+        <label for="good-email">Email:</label>
+        <input type="email" id="good-email" aria-required="true">
+        
+        <label for="good-country">Country:</label>
+        <select id="good-country" aria-label="Select your country">
+            <option value="">Choose...</option>
+            <option value="us">United States</option>
+            <option value="ca">Canada</option>
+        </select>
+    </div>
+
+    <!-- Bad examples without ARIA -->
+    <div class="section bad">
+        <h2>❌ Bad - Without ARIA Labels</h2>
+        
+        <h3>Buttons</h3>
+        <button>💾 Save</button>
+        <button>🗑️ Delete</button>
+        <button>❌</button>
+        
+        <h3>Form Elements</h3>
+        Name: <input type="text">
+        <div>Enter your full name</div>
+        
+        Email: <input type="email">
+        
+        Country:
+        <select>
+            <option value="">Choose...</option>
+            <option value="us">United States</option>
+            <option value="ca">Canada</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <h2>📝 The Difference</h2>
+        <p><strong>ARIA Labels (Green section):</strong></p>
+        <ul>
+            <li>Screen readers can understand button purposes</li>
+            <li>Form fields are properly connected to their labels</li>
+            <li>Help text is associated with inputs</li>
+            <li>Required fields are identified</li>
+        </ul>
+        
+        <p><strong>Without ARIA (Red section):</strong></p>
+        <ul>
+            <li>Icon-only buttons have no description</li>
+            <li>Form labels aren't properly connected</li>
+            <li>Screen readers can't identify required fields</li>
+            <li>Help text isn't associated with inputs</li>
+        </ul>
+    </div>
+
+</body>
+</html>
