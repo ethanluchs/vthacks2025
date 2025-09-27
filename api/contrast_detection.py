@@ -1,164 +1,302 @@
 import cv2
 import numpy as np
-import pytesseract
+from typing import List, Tuple, Optional
 from playwright.sync_api import sync_playwright
-from PIL import Image, ImageDraw
-import time
-import base64
+from PIL import Image
 import tempfile
 import os
-import math
 import shutil
 import uuid
+import math
 
-# render page and get screenshot
-def capture_screenshot(url, screenshot_path="screenshot.png"):
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.goto(url, timeout=30000)
-        # time.sleep(3000)
-        page.screenshot(path=screenshot_path, full_page=True)
-        browser.close()
-    return screenshot_path
+# ---------------- Contrast helpers ----------------
+def relative_luminance(rgb_color: np.ndarray) -> float:
+    """rgb_color: array-like in RGB order (0..255)."""
+    rgb = [v / 255.0 for v in rgb_color]
+    def adjust(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = [adjust(c) for c in rgb]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
+def contrast_ratio(fg_rgb: np.ndarray, bg_rgb: np.ndarray) -> float:
+    """WCAG contrast ratio: inputs must be RGB-order arrays (0..255)."""
+    l1 = relative_luminance(fg_rgb)
+    l2 = relative_luminance(bg_rgb)
+    if l1 < l2:
+        l1, l2 = l2, l1
+    return (l1 + 0.05) / (l2 + 0.05)
 
-# optical character recognition text detection
-# takes in an image path and returns a list of tuples [x, y, w, h, text]
-# x, y = top left of bounding box
-# w, h = size of bounding box
-def detect_text_regions(
-        image_path,
-        oem=3,   # OCR Engine Mode
-        psm=12,   # Page Segmentation Mode
-        min_conf=40,
-        level="line"  # "word", "line", or "paragraph"
-):
+# ---------------- EAST loader + detector ----------------
+def load_east(east_path: str):
+    net = cv2.dnn.readNet(east_path)
+    return net
+
+def _resize_to_multiple_of_32(img: np.ndarray, max_dim: int = 1280) -> Tuple[np.ndarray, float, float]:
+    H, W = img.shape[:2]
+    scale = 1.0
+    if max(H, W) > max_dim:
+        scale = max_dim / float(max(H, W))
+    newW = int(np.ceil((W * scale) / 32.0) * 32)
+    newH = int(np.ceil((H * scale) / 32.0) * 32)
+    # protect against zero
+    newW = max(32, newW)
+    newH = max(32, newH)
+    resized = cv2.resize(img, (newW, newH))
+    rW = W / float(newW)
+    rH = H / float(newH)
+    return resized, rW, rH
+
+def detect_text_regions(image: np.ndarray, net, conf_threshold: float = 0.5, nms_threshold: float = 0.4) -> List[Tuple[int,int,int,int]]:
     """
-    Detect text regions with adjustable granularity.
-    Returns: List of tuples (x, y, w, h, text, conf).
+    Returns boxes as (startX, startY, endX, endY) in coordinates relative to the input image.
+    `net` must be an already loaded EAST net (cv2.dnn.Net).
     """
+    H, W = image.shape[:2]
+    resized, rW, rH = _resize_to_multiple_of_32(image, max_dim=1280)  # tune max_dim if you want higher res
+    blob = cv2.dnn.blobFromImage(resized, 1.0, (resized.shape[1], resized.shape[0]),
+                                 (123.68, 116.78, 103.94), swapRB=True, crop=False)
+    net.setInput(blob)
+    layer_names = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
+    scores, geometry = net.forward(layer_names)
 
-    # preprocessing the image
-    img = cv2.imread(image_path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    final = thresh.copy()
+    rects = []
+    confidences = []
+    numRows, numCols = scores.shape[2], scores.shape[3]
 
-    # converting the image to usable data
-    config = f"--oem {oem} --psm {psm}"
-    data = pytesseract.image_to_data(final, output_type=pytesseract.Output.DICT, config=config)
-
-    level_map = {"page": 1, "block": 2, "paragraph": 3, "line": 4, "word": 5}
-    target_level = level_map.get(level, 5)  # default: word
+    for y in range(numRows):
+        scoresData = scores[0, 0, y]
+        xData0 = geometry[0, 0, y]
+        xData1 = geometry[0, 1, y]
+        xData2 = geometry[0, 2, y]
+        xData3 = geometry[0, 3, y]
+        anglesData = geometry[0, 4, y]
+        for x in range(numCols):
+            if scoresData[x] < conf_threshold:
+                continue
+            offsetX = x * 4.0
+            offsetY = y * 4.0
+            angle = anglesData[x]
+            cos = np.cos(angle)
+            sin = np.sin(angle)
+            h = xData0[x] + xData2[x]
+            w = xData1[x] + xData3[x]
+            endX = int(offsetX + (cos * xData1[x]) + (sin * xData2[x]))
+            endY = int(offsetY - (sin * xData1[x]) + (cos * xData2[x]))
+            startX = int(endX - w)
+            startY = int(endY - h)
+            rects.append((startX, startY, endX, endY))
+            confidences.append(float(scoresData[x]))
 
     boxes = []
-    n = len(data["level"])
-    for i in range(n):
-        if data["level"][i] == target_level:
-            x, y, w, h = (
-                data["left"][i],
-                data["top"][i],
-                data["width"][i],
-                data["height"][i],
-            )
-
-            try:
-                conf = int(float(data["conf"][i]))
-            except ValueError:
-                conf = -1
-
-            text = data["text"][i].strip()
-
-            # Skip unreasonably thin boxes
-            aspect_ratio = w / float(h) if h > 0 else 0
-            if w < 2 or h < 2:  # too small in either direction
-                continue
-            if aspect_ratio < 0.05 or aspect_ratio > 20:
-                # extreme aspect ratios (tall-skinny or wide-flat lines)
-                continue
-
-            # For higher levels, text might be empty → try aggregating child words
-            if text == "" and target_level < 5:
-                words = []
-                for j in range(n):
-                    if (
-                            data["level"][j] == 5  # word
-                            and int(float(data["conf"][j])) >= min_conf
-                            and data["left"][j] >= x
-                            and data["top"][j] >= y
-                            and data["left"][j] + data["width"][j] <= x + w
-                            and data["top"][j] + data["height"][j] <= y + h
-                    ):
-                        words.append(data["text"][j].strip())
-                text = " ".join(words)
-
-            if conf >= min_conf or target_level < 5:
-                boxes.append((x, y, w, h, text))
-
-    print(boxes)
+    if len(rects):
+        indices = cv2.dnn.NMSBoxes(rects, confidences, conf_threshold, nms_threshold)
+        if len(indices):
+            # indices may be nested array; flatten safely
+            inds = indices.flatten() if hasattr(indices, "flatten") else indices
+            for i in inds:
+                (sx, sy, ex, ey) = rects[i]
+                # scale back to original image coordinates of the sub-image
+                sx = max(0, int(sx * rW))
+                sy = max(0, int(sy * rH))
+                ex = min(W, int(ex * rW))
+                ey = min(H, int(ey * rH))
+                if ex - sx > 0 and ey - sy > 0:
+                    boxes.append((sx, sy, ex, ey))
     return boxes
 
+# ---------------- Splitting for tall images ----------------
+def split_vertical_slices(image: np.ndarray, slice_aspect: float = 16/9.0) -> List[Tuple[int,int,np.ndarray]]:
+    """Return list of (y0, y1, sub_img). If image isn't tall, returns single slice (0,H,image)."""
+    H, W = image.shape[:2]
+    slices = []
+    if H / float(W) > slice_aspect:  # too tall; slice into HD-aspect chunks
+        slice_h = int(W * slice_aspect)
+        if slice_h <= 0:
+            slice_h = H
+        for y0 in range(0, H, slice_h):
+            y1 = min(H, y0 + slice_h)
+            slices.append((y0, y1, image[y0:y1, :].copy()))
+    else:
+        slices.append((0, H, image.copy()))
+    return slices
 
-
-# WCAG luminance
-# takes in rgb = [red, green, blue]
-# returns a single number between 0 and 1 that tells us how bright a color is (0 is dark)
-def relative_luminance(rgb):
-    # convert RGB to relative luminance
-    def f(c):
-        c = c / 255.0
-        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = rgb
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
-
-# WCAG contrast
-# returns ((L_lighter + 0.05) / (L_darker + 0.05))
-# L is luminance
-def contrast_ratio(fg, bg):
-    L1, L2 = sorted([relative_luminance(fg), relative_luminance(bg)], reverse=True)
-    return (L1 + 0.05) / (L2 + 0.05)
-
-# analyze contrast of each text box
-def analyze_contrast(image_path, boxes, out_path="annotated.png", wcag_threshold=4.5):
-    img = Image.open(image_path).convert("RGB")
-    draw = ImageDraw.Draw(img)
-
+# ---------------- Annotate + contrast calculation ----------------
+def annotate_contrast(image: np.ndarray, boxes: List[Tuple[int,int,int,int]], pad: int = 8, wcag_threshold: float = 4.5) -> Tuple[np.ndarray, List[dict]]:
+    """
+    Draws boxes and contrast ratio text directly on `image` copy and returns it plus a list of issues.
+    Issues contain box coordinates and ratio if below `wcag_threshold`.
+    """
+    out = image.copy()
+    H, W = out.shape[:2]
     issues = []
 
-    for (x, y, w, h, text) in boxes:
-        region = img.crop((x, y, x+w, y+h))
-        arr = np.array(region)
-
-        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-        _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        text_pixels = arr[mask == 0]
-        bg_pixels   = arr[mask == 255]
-
-        if len(text_pixels) == 0 or len(bg_pixels) == 0:
+    for (sx, sy, ex, ey) in boxes:
+        # clip and sanity
+        sx, sy = max(0, sx), max(0, sy)
+        ex, ey = min(W, ex), min(H, ey)
+        if ex <= sx or ey <= sy:
             continue
 
-        fg_color = np.median(text_pixels, axis=0)
-        bg_color = np.median(bg_pixels, axis=0)
-        ratio = contrast_ratio(fg_color, bg_color)
+        roi = out[sy:ey, sx:ex]
+        if roi.size == 0:
+            continue
 
+        # Try to segment text inside ROI using Otsu on grayscale.
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        try:
+            _, mask_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        except Exception:
+            mask_otsu = np.ones_like(gray) * 255
+
+        # Determine which part is likely the text: smaller region typically corresponds to text
+        cnt_white = int(np.count_nonzero(mask_otsu == 255))
+        cnt_black = mask_otsu.size - cnt_white
+        if cnt_white == 0 or cnt_black == 0:
+            # fallback: use whole ROI
+            fg_pixels = roi.reshape(-1, 3)
+        else:
+            if cnt_white < cnt_black:
+                fg_mask = (mask_otsu == 255)
+            else:
+                fg_mask = (mask_otsu == 0)
+            # select full pixels (N,3) by indexing with boolean mask on 2D shape
+            fg_pixels = roi[fg_mask]
+
+            # If segmentation produced no pixels (weird), fallback to all pixels
+            if fg_pixels.size == 0:
+                fg_pixels = roi.reshape(-1, 3)
+
+        # mean foreground color in BGR
+        fg_color_bgr = np.mean(fg_pixels, axis=0)
+
+        # Build background sampling region (pad around the box), then exclude the ROI area inside it
+        bg_y0 = max(0, sy - pad)
+        bg_y1 = min(H, ey + pad)
+        bg_x0 = max(0, sx - pad)
+        bg_x1 = min(W, ex + pad)
+        bg_region = out[bg_y0:bg_y1, bg_x0:bg_x1].copy()
+
+        # Coordinates of ROI inside bg_region
+        roi_in_bg_y0 = sy - bg_y0
+        roi_in_bg_y1 = roi_in_bg_y0 + (ey - sy)
+        roi_in_bg_x0 = sx - bg_x0
+        roi_in_bg_x1 = roi_in_bg_x0 + (ex - sx)
+
+        # Zero-out the ROI area inside bg_region so it won't be counted as background
+        # but keep the rest for sampling.
+        bg_region[roi_in_bg_y0:roi_in_bg_y1, roi_in_bg_x0:roi_in_bg_x1] = 0
+
+        # create per-pixel mask of non-zero (any channel != 0)
+        if bg_region.size == 0:
+            bg_pixels = np.array([], dtype=np.uint8).reshape(0,3)
+        else:
+            bg_mask = np.any(bg_region != 0, axis=2)
+            if np.count_nonzero(bg_mask) == 0:
+                # fallback: sample a thin border just outside ROI from the full image (not zeroed)
+                top = out[max(0, sy - pad):sy, sx:ex]
+                bottom = out[ey:min(H, ey + pad), sx:ex]
+                left = out[sy:ey, max(0, sx - pad):sx]
+                right = out[sy:ey, ex:min(W, ex + pad)]
+                candidates = []
+                if top.size: candidates.append(top.reshape(-1,3))
+                if bottom.size: candidates.append(bottom.reshape(-1,3))
+                if left.size: candidates.append(left.reshape(-1,3))
+                if right.size: candidates.append(right.reshape(-1,3))
+                if candidates:
+                    bg_pixels = np.vstack(candidates)
+                else:
+                    bg_pixels = np.array([], dtype=np.uint8).reshape(0,3)
+            else:
+                bg_pixels = bg_region[bg_mask]
+
+        # If background sampling failed entirely, fallback to median color of entire image
+        if bg_pixels.size == 0:
+            bg_color_bgr = np.median(out.reshape(-1, 3), axis=0)
+        else:
+            bg_color_bgr = np.mean(bg_pixels, axis=0)
+
+        # convert BGR->RGB for luminance/contrast functions
+        fg_rgb = fg_color_bgr[::-1]
+        bg_rgb = bg_color_bgr[::-1]
+
+        ratio = contrast_ratio(fg_rgb, bg_rgb)
+
+        # Only annotate (draw rectangle + ratio text) when the ratio indicates a low-contrast issue.
         if ratio < wcag_threshold:
+            # Draw rectangle and ratio for failing boxes (red)
+            color_box = (0, 0, 255)
+            cv2.rectangle(out, (sx, sy), (ex, ey), color_box, 2)
+
+            text = f"{ratio:.2f}"
+            # choose text color for readability: black or white depending on background luminance
+            bg_lum = relative_luminance(bg_rgb)
+            txt_color = (0, 0, 0) if bg_lum > 0.5 else (255, 255, 255)
+            # Put text above the box if possible, else inside.
+            text_pos = (sx, sy - 8) if sy - 12 > 0 else (sx + 4, sy + 12)
+            cv2.putText(out, text, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.45, txt_color, 1, cv2.LINE_AA)
+
             issues.append({
-                "x": int(x), "y": int(y), "w": int(w), "h": int(h),
-                "type": "low_contrast", "ratio": float(ratio), "text": text
+                "x": int(sx), "y": int(sy), "w": int(ex-sx), "h": int(ey-sy),
+                "type": "low_contrast", "ratio": float(ratio)
             })
-            draw.rectangle([x, y, x+w, y+h], outline="red", width=3)
-            draw.text((x, y-12), f"{ratio:.2f}", fill="red")
 
-    img.save(out_path)
-    return out_path, issues
+    return out, issues
 
-def _img_to_data_url(path):
-    with open(path, "rb") as f:
-        return "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
+# ---------------- Main analyze function ----------------
+def analyze_contrast(image_path: str, east_path: str = "frozen_east_text_detection.pb"):
+    image = cv2.imread(image_path)
+    if image is None:
+        raise FileNotFoundError(f"Couldn't open image: {image_path}")
 
-def split_image_vertically(image_path, tmp_dir, max_height=1080):
+    net = load_east(east_path)
+    slices = split_vertical_slices(image, slice_aspect=16/9.0)
+    boxes_global = []
+
+    for (y0, y1, sub_img) in slices:
+        # detect on the sub-image
+        boxes = detect_text_regions(sub_img, net, conf_threshold=0.5, nms_threshold=0.4)
+        # offset them back to original coordinates
+        for (sx, sy, ex, ey) in boxes:
+            boxes_global.append((sx, sy + y0, ex, ey + y0))
+
+    annotated, issues = annotate_contrast(image, boxes_global)
+    # avoid GUI calls on server; just return the annotated image and issues
+    return annotated, issues
+
+# --- Utilities to match legacy analyze_* API used by server.py ---
+
+# Directory under the Next.js app's public/ so files are served at /analysis_images/<file>
+PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+PUBLIC_IMAGES_DIR = os.path.join(PROJECT_ROOT, 'web', 'public', 'analysis_images')
+os.makedirs(PUBLIC_IMAGES_DIR, exist_ok=True)
+
+def _img_to_data_url(path: str) -> str:
+    with open(path, 'rb') as f:
+        import base64
+        return 'data:image/png;base64,' + base64.b64encode(f.read()).decode('ascii')
+
+def save_to_public(src_path: str, public_dir: str = PUBLIC_IMAGES_DIR, prefix: str = 'annotated', prefer_jpeg: bool = False, jpeg_quality: int = 80) -> str:
+    ext = os.path.splitext(src_path)[1].lower()
+    if prefer_jpeg and ext not in ('.jpg', '.jpeg'):
+        out_ext = '.jpg'
+    else:
+        out_ext = ext if ext in ('.png', '.jpg', '.jpeg') else '.png'
+
+    name = f"{prefix}_{uuid.uuid4().hex}{out_ext}"
+    dst = os.path.join(public_dir, name)
+
+    try:
+        img = Image.open(src_path).convert('RGB')
+        if out_ext in ('.jpg', '.jpeg'):
+            img.save(dst, format='JPEG', quality=jpeg_quality, optimize=True)
+        else:
+            img.save(dst, format='PNG', optimize=True)
+    except Exception:
+        shutil.copy2(src_path, dst)
+
+    return f"/analysis_images/{name}"
+
+def split_image_vertically(image_path: str, tmp_dir: str, max_height: int = 1080) -> List[str]:
     """
     Split an image vertically into segments each with height <= max_height.
     Returns list of segment file paths (in tmp_dir) in top->bottom order.
@@ -180,40 +318,16 @@ def split_image_vertically(image_path, tmp_dir, max_height=1080):
         segments.append(seg_path)
     return segments
 
-# Directory under the Next.js app's public/ so files are served at /analysis_images/<file>
-PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
-PUBLIC_IMAGES_DIR = os.path.join(PROJECT_ROOT, 'web', 'public', 'analysis_images')
-os.makedirs(PUBLIC_IMAGES_DIR, exist_ok=True)
+def capture_screenshot(url: str, screenshot_path: str = "screenshot.png") -> str:
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(url, timeout=30000)
+        page.screenshot(path=screenshot_path, full_page=True)
+        browser.close()
+    return screenshot_path
 
-def save_to_public(src_path, public_dir=PUBLIC_IMAGES_DIR, prefix='annotated', prefer_jpeg=False, jpeg_quality=80):
-    """
-    Copy/convert src_path into the project's web/public/analysis_images folder
-    and return the relative URL path (e.g. /analysis_images/<filename>).
-    Uses a uuid to avoid collisions.
-    """
-    ext = os.path.splitext(src_path)[1].lower()
-    # choose extension
-    if prefer_jpeg and ext not in ('.jpg', '.jpeg'):
-        out_ext = '.jpg'
-    else:
-        out_ext = ext if ext in ('.png', '.jpg', '.jpeg') else '.png'
-
-    name = f"{prefix}_{uuid.uuid4().hex}{out_ext}"
-    dst = os.path.join(public_dir, name)
-
-    try:
-        img = Image.open(src_path).convert("RGB")
-        if out_ext in ('.jpg', '.jpeg'):
-            img.save(dst, format='JPEG', quality=jpeg_quality, optimize=True)
-        else:
-            img.save(dst, format='PNG', optimize=True)
-    except Exception:
-        # fallback to direct copy if Pillow save fails
-        shutil.copy2(src_path, dst)
-
-    return f"/analysis_images/{name}"
-
-def analyze_url(url, tmp_dir=None, max_segment_height=1080):
+def analyze_url(url: str, tmp_dir: Optional[str] = None, max_segment_height: int = 1080, east_path: str = "frozen_east_text_detection.pb"):
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
     screenshot_path = os.path.join(tmp_dir, "screenshot.png")
@@ -221,32 +335,59 @@ def analyze_url(url, tmp_dir=None, max_segment_height=1080):
 
     segment_paths = split_image_vertically(screenshot_path, tmp_dir, max_height=max_segment_height)
     screenshots = []
+
+    net = load_east(east_path)
+
     for idx, seg_path in enumerate(segment_paths, start=1):
-        boxes = detect_text_regions(seg_path)
-        annotated_path, issues = analyze_contrast(seg_path, boxes, out_path=os.path.join(tmp_dir, f"annotated_part{idx}.png"))
-        public_url = save_to_public(annotated_path, prefix=f"mainpage_part{idx}")
+        img = cv2.imread(seg_path)
+        if img is None:
+            continue
+        # detect boxes
+        slices = split_vertical_slices(img, slice_aspect=16/9.0)
+        boxes_global = []
+        for (y0, y1, sub_img) in slices:
+            boxes = detect_text_regions(sub_img, net, conf_threshold=0.5, nms_threshold=0.4)
+            for (sx, sy, ex, ey) in boxes:
+                boxes_global.append((sx, sy + y0, ex, ey + y0))
+
+        annotated, issues = annotate_contrast(img, boxes_global)
+        out_path = os.path.join(tmp_dir, f"annotated_part{idx}.png")
+        cv2.imwrite(out_path, annotated)
+        public_url = save_to_public(out_path, prefix=f"mainpage_part{idx}")
         screenshots.append({
             "url": public_url,
             "title": f"Main Page (part {idx}/{len(segment_paths)})",
             "issues": issues
         })
 
-    return {
-        "files": [],
-        "screenshots": screenshots,
-        "aria": {}, "altText": {}, "structure": {}
-    }
+    return {"files": [], "screenshots": screenshots, "aria": {}, "altText": {}, "structure": {}}
 
-def analyze_files(file_paths, tmp_dir=None, max_segment_height=1080):
+def analyze_files(file_paths: List[str], tmp_dir: Optional[str] = None, max_segment_height: int = 1080, east_path: str = "frozen_east_text_detection.pb"):
     if tmp_dir is None:
         tmp_dir = tempfile.mkdtemp()
     screenshots = []
     all_files = []
+
+    net = load_east(east_path)
+
     for p in file_paths:
         seg_paths = split_image_vertically(p, tmp_dir, max_height=max_segment_height)
         for idx, seg in enumerate(seg_paths, start=1):
-            annotated_path, issues = analyze_contrast(seg, detect_text_regions(seg), out_path=os.path.join(tmp_dir, f"annotated_{os.path.basename(p)}_part{idx}.png"))
-            public_url = save_to_public(annotated_path, prefix=f"{os.path.splitext(os.path.basename(p))[0]}_part{idx}")
+            img = cv2.imread(seg)
+            if img is None:
+                continue
+            slices = split_vertical_slices(img, slice_aspect=16/9.0)
+            boxes_global = []
+            for (y0, y1, sub_img) in slices:
+                boxes = detect_text_regions(sub_img, net, conf_threshold=0.5, nms_threshold=0.4)
+                for (sx, sy, ex, ey) in boxes:
+                    boxes_global.append((sx, sy + y0, ex, ey + y0))
+
+            annotated, issues = annotate_contrast(img, boxes_global)
+            out_name = f"annotated_{os.path.splitext(os.path.basename(p))[0]}_part{idx}.png"
+            out_path = os.path.join(tmp_dir, out_name)
+            cv2.imwrite(out_path, annotated)
+            public_url = save_to_public(out_path, prefix=f"{os.path.splitext(os.path.basename(p))[0]}_part{idx}")
             screenshots.append({
                 "url": public_url,
                 "title": f"{os.path.basename(p)} (part {idx}/{len(seg_paths)})",
@@ -255,14 +396,11 @@ def analyze_files(file_paths, tmp_dir=None, max_segment_height=1080):
         all_files.append(os.path.basename(p))
     return {"files": all_files, "screenshots": screenshots, "aria": {}, "altText": {}, "structure": {}}
 
-# ---------- Run the pipeline ----------
+# ---------------- Example usage ----------------
 if __name__ == "__main__":
-    # url = "https://black-glacier-0af5bd010.6.azurestaticapps.net/"
-    url = "https://christopherkildea.github.io/"
-    # screenshot = capture_screenshot(url)
-    screenshot = "test_image2.png"
-    # boxes = detect_text_regions(screenshot)
-    boxes = detect_text_regions("test_image.png")
-    annotated = analyze_contrast(screenshot, boxes)
-
-    print(f"Annotated screenshot saved at: {annotated}")
+    # Replace these with your paths
+    IMAGE_PATH = "test_image2.png"
+    EAST_PATH = "frozen_east_text_detection.pb"
+    out = analyze_contrast(IMAGE_PATH, EAST_PATH)
+    # optionally save result
+    cv2.imwrite("annotated_result.png", out)
