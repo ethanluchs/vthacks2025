@@ -1,41 +1,55 @@
-import os
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from typing import List, Optional
 import tempfile
-from fastapi import File, UploadFile
-from flask import app
-from code_analyzer import (
-    check_aria_labels,
-    ImageAltAnalyzer,
-    analyze_nesting_issues
+import os
+import asyncio
+from fastapi.middleware.cors import CORSMiddleware
+
+from . import contrast_detection  # relative import within package
+
+
+# Create FastAPI app instance
+app = FastAPI()
+
+# allow your frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
 @app.post("/analyze")
-async def analyze(files: list[UploadFile] = File(...)):
-    results = []
-    analyzer = ImageAltAnalyzer()  # Create once, reuse
+async def analyze(url: Optional[str] = Form(None), files: Optional[List[UploadFile]] = File(None)):
+    """
+    Accepts either:
+    - JSON/form with 'url' (will capture a screenshot and analyze), or
+    - multipart form with uploaded image files
+    """
+    if not url and not files:
+        raise HTTPException(status_code=400, detail="Provide either a url or files to analyze")
 
-    for f in files:
-        suffix = os.path.splitext(f.filename)[1]
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        tmp.write(await f.read())
-        tmp.close()
-        file_path = tmp.name
+    tmp_dir = tempfile.mkdtemp(prefix="analysis_")
 
-        aria = check_aria_labels(file_path)
-        nesting = []
-        if suffix == ".html":
-            nesting = analyze_nesting_issues(os.path.dirname(file_path))
+    try:
+        if url:
+            # run blocking work in a thread
+            result = await asyncio.to_thread(contrast_detection.analyze_url, url, tmp_dir)
+            return result
 
-        # Run the alt checks (on HTML, JS, or TS files)
-        alt_issues = []
-        if suffix in [".html", ".js", ".ts"]:
-            alt_issues = analyzer.analyze_file(file_path)
+        # handle uploaded files: save to tmp_dir then analyze
+        saved_paths = []
+        for up in files:
+            dest = os.path.join(tmp_dir, up.filename)
+            with open(dest, "wb") as f:
+                f.write(await up.read())
+            saved_paths.append(dest)
 
-        results.append({
-            "filename": f.filename,
-            "aria": aria,
-            "nesting": nesting,
-            "alt_issues": alt_issues,
-        })
+        result = await asyncio.to_thread(contrast_detection.analyze_files, saved_paths, tmp_dir)
+        return result
 
-    return {"results": results}
+    finally:
+        # NOTE: keep temp files around if you want; cleanup code could be added here.
+        pass
