@@ -56,7 +56,7 @@ export interface BackendAnalysisResponse {
 export interface Screenshot {
   url: string;
   title: string;
-  issues: Array<{ x: number; y: number; type: string }>;
+  issues: Array<{ x: number; y: number; type: string }>; //add array of images
 }
 
 export interface ProcessedAnalysisResults {
