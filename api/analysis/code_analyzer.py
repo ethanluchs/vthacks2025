@@ -1189,7 +1189,7 @@ def complete_website_analysis(directory_path=".", output_filename="complete_webs
 # Example usage
 if __name__ == "__main__":
     # Run complete website analysis
-    results = complete_website_analysis(".", "my_complete_website_analysis.json")
+    results = complete_website_analysis(".", "website_analysis.json")
     
     # You can also specify custom directory and filename
     # results = complete_website_analysis("/path/to/your/website", "custom_analysis.json")
