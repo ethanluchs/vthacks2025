@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const GEMINI_API_KEY = 'AIzaSyANnFmE9yYYJDrLCVotQvf97rvpjJXbw4E';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+// Read from environment variables (never commit your actual key in code)
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY as string;
+const GEMINI_API_URL =
+  process.env.GEMINI_API_URL ||
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
 
 interface AIFixRequest {
   code: string;
@@ -24,7 +27,7 @@ export async function POST(request: NextRequest) {
     const { code, issueType, context } = body;
 
     if (!code || !issueType) {
-      console.log('❌ Missing required fields:', { code: !!code, issueType: !!issueType });
+      console.log('Missing required fields:', { code: !!code, issueType: !!issueType });
       return NextResponse.json({ error: 'Code and issueType are required' }, { status: 400 });
     }
 
