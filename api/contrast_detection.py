@@ -106,7 +106,7 @@ def detect_text_regions(image: np.ndarray, net, conf_threshold: float = 0.5, nms
     return boxes
 
 # ---------------- Splitting for tall images ----------------
-def split_vertical_slices(image: np.ndarray, slice_aspect: float = 16/9.0) -> List[Tuple[int,int,np.ndarray]]:
+def split_vertical_slices(image: np.ndarray, slice_aspect: float = 16/9) -> List[Tuple[int,int,np.ndarray]]:
     """Return list of (y0, y1, sub_img). If image isn't tall, returns single slice (0,H,image)."""
     H, W = image.shape[:2]
     slices = []

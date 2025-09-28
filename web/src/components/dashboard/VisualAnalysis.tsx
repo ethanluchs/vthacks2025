@@ -168,11 +168,11 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
               const scale = Math.min(containerSize.w / imgNatural.w, containerSize.h / imgNatural.h);
               const dispW = imgNatural.w * scale;
               const dispH = imgNatural.h * scale;
-              const offsetX = (containerSize.w - dispW) / 2;
-              const offsetY = (containerSize.h - dispH) / 2;
+              const offsetX = (containerSize.w - dispW) / 6;
+              const offsetY = (containerSize.h - dispH) / 6;
 
               // position at center of the issue box
-              const leftPx = offsetX + ((issue.x || 0) + (issue.w || 0) / 2) * scale;
+              const leftPx = (offsetX + (((issue.x || 0) + (issue.w || 0) / 5) * scale));
               const topPx = offsetY + ((issue.y || 0) + (issue.h || 0) / 2) * scale;
               const widthPx = (issue.w || 24) * scale;
               const heightPx = (issue.h || 24) * scale;
@@ -181,8 +181,8 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
               const markerSizePx = Math.max(35, Math.min(48, Math.round(Math.min(32, Math.min(widthPx, heightPx) || 32))));
 
               // Offset marker away from the element if it's near edges
-              let adjLeftPx = leftPx - markerSizePx / 2;
-              let adjTopPx = topPx - markerSizePx / 2;
+              let adjLeftPx = leftPx - markerSizePx / 4;
+              let adjTopPx = topPx - markerSizePx / 4;
 
               // horizontal nudges
               if (leftPx < containerSize.w * 0.2) {
