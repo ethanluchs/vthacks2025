@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, AlertTriangle, Code2, Target } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import AIFixButton from '../AIFixButton';
+import CodeComparisonModal from '../CodeComparisonModal';
 
 interface MissingElement {
   type: string;
@@ -31,6 +33,13 @@ interface ARIASectionProps {
 export default function ARIASection({ data }: ARIASectionProps) {
   const [showAllElements, setShowAllElements] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [aiResult, setAiResult] = useState<{
+    originalCode: string;
+    improvedCode: string;
+    explanation: string;
+    issueType: string;
+  } | null>(null);
 
   const filteredElements = selectedType
     ? data.allMissingElements.filter(el => el.type === selectedType)
@@ -53,9 +62,23 @@ export default function ARIASection({ data }: ARIASectionProps) {
 
       {/* Sample Code */}
       <div>
-        <div className="text-sm font-medium mb-2 flex items-center gap-2">
-          <Code2 className="w-4 h-4" />
-          Sample Issue:
+        <div className="text-sm font-medium mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Code2 className="w-4 h-4" />
+            Sample Issue:
+          </div>
+          <AIFixButton
+            code={data.sampleCode}
+            issueType="ARIA missing"
+            context="Missing ARIA labels for accessibility"
+            onAIFix={(result) => {
+              setAiResult({
+                ...result,
+                issueType: 'ARIA missing'
+              });
+              setModalOpen(true);
+            }}
+          />
         </div>
         <div className="rounded-lg overflow-hidden border border-zinc-700/50 mb-3">
           <SyntaxHighlighter
@@ -130,25 +153,58 @@ export default function ARIASection({ data }: ARIASectionProps) {
                 </details>
               )}
               
-              <div className="rounded overflow-hidden border border-zinc-700/30 mb-2" style={{ position: 'relative' }}>
-                <SyntaxHighlighter
-                  language="html"
-                  style={oneDark}
-                  customStyle={{
-                    margin: 0,
-                    padding: '8px',
-                    background: 'rgb(9 9 11)',
-                    fontSize: '11px',
-                  }}
-                  showLineNumbers={false}
-                >
-                  {element.code}
-                </SyntaxHighlighter>
+              <div className="space-y-2 mb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Code Sample:</span>
+                  <AIFixButton
+                    code={element.code}
+                    issueType={`ARIA missing - ${element.type} element`}
+                    context={`Missing ARIA labels for ${element.type} element in ${element.filename}`}
+                    onAIFix={(result) => {
+                      setAiResult({
+                        ...result,
+                        issueType: `ARIA missing - ${element.type} element`
+                      });
+                      setModalOpen(true);
+                    }}
+                    className="text-xs px-2 py-1"
+                  />
+                </div>
+                <div className="rounded overflow-hidden border border-zinc-700/30">
+                  <SyntaxHighlighter
+                    language="html"
+                    style={oneDark}
+                    customStyle={{
+                      margin: 0,
+                      padding: '8px',
+                      background: 'rgb(9 9 11)',
+                      fontSize: '11px',
+                    }}
+                    showLineNumbers={false}
+                  >
+                    {element.code}
+                  </SyntaxHighlighter>
+                </div>
               </div>
               <div className="text-xs text-zinc-500">{element.location}</div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* AI Code Comparison Modal */}
+      {aiResult && (
+        <CodeComparisonModal
+          isOpen={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setAiResult(null);
+          }}
+          originalCode={aiResult.originalCode}
+          improvedCode={aiResult.improvedCode}
+          explanation={aiResult.explanation}
+          issueType={aiResult.issueType}
+        />
       )}
     </div>
   );

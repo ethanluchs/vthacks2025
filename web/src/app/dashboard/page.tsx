@@ -459,11 +459,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* AI Fix Placeholder - will be expanded later */}
-          <div className="mt-6"> 
-            <AIFix />
-          </div>
-
           {/* Debug info (remove for production) */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-8 space-y-4">
