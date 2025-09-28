@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Eye, Image } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Image as ImageIcon, Code2 } from 'lucide-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface MissingTag {
-  tag: string;
-  filename: string;
-  suggestion: string;
+  tag?: string;
+  filename?: string;
+  suggestion?: string;
+  html?: string;
+  element_html?: string;
 }
 
 interface AltTextData {
@@ -24,7 +28,6 @@ interface AltTextSectionProps {
 
 export default function AltTextSection({ data }: AltTextSectionProps) {
   const [showAllTags, setShowAllTags] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(true);
 
   return (
     <div className="space-y-4">
@@ -54,27 +57,29 @@ export default function AltTextSection({ data }: AltTextSectionProps) {
 
       {/* Sample Missing Tag */}
       <div>
-        <div className="text-sm font-medium mb-2">Sample Issue:</div>
-        <div className="bg-zinc-950 rounded-lg p-3 font-mono text-sm text-zinc-300 mb-2">
-          {data.sampleMissingTag}
+        <div className="text-sm font-medium mb-2 flex items-center gap-2">
+          <Code2 className="w-4 h-4" />
+          Sample Issue:
         </div>
-        {showSuggestions && (
-          <div className="text-sm text-emerald-400">
-            💡 Suggested: alt="Hero banner showcasing main content"
-          </div>
-        )}
+        <div className="rounded-lg overflow-hidden border border-zinc-700/50 mb-3">
+          <SyntaxHighlighter
+            language="html"
+            style={oneDark}
+            customStyle={{
+              margin: 0,
+              padding: '12px',
+              background: 'rgb(9 9 11)',
+              fontSize: '13px'
+            }}
+            showLineNumbers={false}
+          >
+            {data.sampleMissingTag}
+          </SyntaxHighlighter>
+        </div>
+
       </div>
 
-      {/* Toggle Suggestions */}
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={showSuggestions}
-          onChange={(e) => setShowSuggestions(e.target.checked)}
-          className="rounded"
-        />
-        Show AI-suggested alt texts
-      </label>
+
 
       {/* View All Toggle */}
       <button
@@ -91,21 +96,28 @@ export default function AltTextSection({ data }: AltTextSectionProps) {
 
       {/* All Tags List */}
       {showAllTags && (
-        <div className="space-y-3 max-h-64 overflow-y-auto border-t border-zinc-800 pt-4">
+        <div className="space-y-3 max-h-80 overflow-y-auto border-t border-zinc-800 pt-4 scrollbar-thin scrollbar-track-zinc-800 scrollbar-thumb-zinc-600">
           {data.allMissingTags.map((item, index) => (
             <div key={index} className="bg-zinc-800/50 rounded p-3">
               <div className="flex items-center gap-2 mb-2 text-xs text-zinc-500">
-                <Image className="w-3 h-3" />
-                <span>{item.filename}</span>
+                <ImageIcon className="w-3 h-3" />
+                <span>{item.filename || 'Unknown file'}</span>
               </div>
-              <div className="bg-zinc-950 rounded p-2 font-mono text-xs text-zinc-300 mb-2 overflow-x-auto">
-                {item.tag}
+              <div className="rounded overflow-hidden border border-zinc-700/30 mb-2">
+                <SyntaxHighlighter
+                  language="html"
+                  style={oneDark}
+                  customStyle={{
+                    margin: 0,
+                    padding: '8px',
+                    background: 'rgb(9 9 11)',
+                    fontSize: '11px'
+                  }}
+                  showLineNumbers={false}
+                >
+                  {item.tag || 'No code available'}
+                </SyntaxHighlighter>
               </div>
-              {showSuggestions && (
-                <div className="text-xs text-emerald-400">
-                  💡 Suggested: alt="{item.suggestion}"
-                </div>
-              )}
             </div>
           ))}
         </div>

@@ -9,6 +9,7 @@ import shutil
 import uuid
 import math
 
+
 # ---------------- Contrast helpers ----------------
 def relative_luminance(rgb_color: np.ndarray) -> float:
     """rgb_color: array-like in RGB order (0..255)."""

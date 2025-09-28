@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Silk from '../../components/Silk';
+import PageTransition from '../../components/PageTransition';
 
 export default function InputForm() {
   const [files, setFiles] = useState<File[]>([]);
@@ -120,25 +121,47 @@ export default function InputForm() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden text-white">
-      {/* Silk Background */}
-      <div className="absolute inset-0 z-0">
-        <Silk
-          speed={2}
-          scale={1.8}
-          color="#0f0f23"
-          noiseIntensity={1.3}
-          rotation={0.1}
-        />
-      </div>
+    <PageTransition>
+      <div className="min-h-screen relative overflow-hidden text-white">
+        {/* Silk Background */}
+        <div className="absolute inset-0 z-0">
+          <Silk
+            speed={2}
+            scale={1.8}
+            color="#0f0f23"
+            noiseIntensity={1.3}
+            rotation={0.1}
+          />
+        </div>
 
-      {/* Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+        {/* Content */}
+        <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
         <div className="max-w-lg w-full">
 
-          <h1 className="text-3xl font-bold mb-3 bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-center text-transparent">
-            Accessibility Analyzer
-          </h1>
+          {/* Karble Branding */}
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 via-purple-500 to-cyan-400 rounded-xl flex items-center justify-center shadow-lg relative overflow-hidden">
+              {/* Accessibility-focused icon design */}
+              <div className="relative">
+                {/* Eye symbol for visibility/accessibility */}
+                <div className="w-5 h-3 border-2 border-white rounded-full relative">
+                  <div className="w-2 h-2 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                </div>
+                {/* Checkmark overlay */}
+                <div className="absolute -top-1 -right-1 w-2.5 h-2.5">
+                  <svg viewBox="0 0 8 8" className="w-full h-full fill-white">
+                    <path d="M1 4 L3 6 L7 2" stroke="white" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="text-center">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-1">
+                Karble
+              </h1>
+              <p className="text-zinc-400 text-sm font-medium">Accessibility Analysis Platform</p>
+            </div>
+          </div>
 
 
           <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-700/50 rounded-2xl p-8 shadow-2xl ring-1 ring-white/10">
@@ -297,5 +320,6 @@ export default function InputForm() {
         </div>
       </div>
     </div>
+    </PageTransition>
   );
 }
