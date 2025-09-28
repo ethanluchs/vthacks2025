@@ -122,16 +122,19 @@ def split_vertical_slices(image: np.ndarray, slice_aspect: float = 16/9.0) -> Li
     return slices
 
 # ---------------- Annotate + contrast calculation ----------------
-def annotate_contrast(image: np.ndarray, boxes: List[Tuple[int,int,int,int]], pad: int = 8, wcag_threshold: float = 4.5) -> Tuple[np.ndarray, List[dict]]:
+def annotate_contrast(image: np.ndarray, boxes: List[Tuple[int,int,int,int]], pad: int = 8, wcag_threshold: float = 4.5, max_boxes: int = 5) -> Tuple[np.ndarray, List[dict]]:
     """
     Draws boxes and contrast ratio text directly on `image` copy and returns it plus a list of issues.
     Issues contain box coordinates and ratio if below `wcag_threshold`.
+
+    Only the first `max_boxes` boxes are analyzed and annotated to avoid overcrowding.
     """
     out = image.copy()
     H, W = out.shape[:2]
     issues = []
 
-    for (sx, sy, ex, ey) in boxes:
+    # limit boxes to first `max_boxes` items to avoid annotating too many boxes per image
+    for (sx, sy, ex, ey) in boxes[:max_boxes]:
         # clip and sanity
         sx, sy = max(0, sx), max(0, sy)
         ex, ey = min(W, ex), min(H, ey)
@@ -234,7 +237,7 @@ def annotate_contrast(image: np.ndarray, boxes: List[Tuple[int,int,int,int]], pa
             txt_color = (0, 0, 0) if bg_lum > 0.5 else (255, 255, 255)
             # Put text above the box if possible, else inside.
             text_pos = (sx, sy - 8) if sy - 12 > 0 else (sx + 4, sy + 12)
-            cv2.putText(out, text, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.45, txt_color, 1, cv2.LINE_AA)
+            # cv2.putText(out, text, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.45, txt_color, 1, cv2.LINE_AA)
 
             issues.append({
                 "x": int(sx), "y": int(sy), "w": int(ex-sx), "h": int(ey-sy),

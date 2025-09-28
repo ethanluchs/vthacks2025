@@ -1,5 +1,5 @@
 import { Camera, Download, ChevronLeft, ChevronRight, Eye, AlertTriangle, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 
 interface Issue {
@@ -47,6 +47,23 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
   
   const currentScreenshot = screenshots[currentIndex];
   const hasMultiple = screenshots.length > 1;
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      const rect = containerRef.current!.getBoundingClientRect();
+      setContainerSize({ w: rect.width, h: rect.height });
+    });
+    ro.observe(containerRef.current);
+    // initialize
+    const rect = containerRef.current.getBoundingClientRect();
+    setContainerSize({ w: rect.width, h: rect.height });
+    return () => ro.disconnect();
+  }, [currentIndex]);
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => prev === 0 ? screenshots.length - 1 : prev - 1);
@@ -115,13 +132,20 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
       </div>
       
       <div className="p-6 flex-1 flex flex-col min-h-0">
-        <div className="relative bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl flex-1 overflow-hidden border border-zinc-700/50 shadow-inner" style={{ minHeight: '500px' }}>
+        <div ref={containerRef} className="relative bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-xl flex-1 overflow-hidden border border-zinc-700/50 shadow-inner" style={{ minHeight: '500px' }}>
           <Image 
             src={currentScreenshot.url} 
             alt={`Screenshot: ${currentScreenshot.title}`}
             fill
             className="object-contain"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 75vw, 60vw"
+            onLoadingComplete={(img) => {
+              if (img && 'naturalWidth' in img) {
+                // img may be an HTMLImageElement or an object with naturalWidth/naturalHeight
+                const anyImg = img as any;
+                setImgNatural({ w: anyImg.naturalWidth || 0, h: anyImg.naturalHeight || 0 });
+              }
+            }}
           />
           
           {/* Issue Markers */}
@@ -129,17 +153,93 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
             const isContrastIssue = issue.type === 'low_contrast' && issue.ratio !== undefined;
             const compliance = isContrastIssue ? getWCAGCompliance(issue.ratio!) : null;
             const ComplianceIcon = compliance?.icon;
-            
+            // compute marker position relative to actual rendered image inside the container
+            const computeMarkerStyle = () => {
+              // fallback to previous constants if we don't have sizes yet
+              if (!imgNatural || !containerSize) {
+                return {
+                  left: `${(issue.x / 1200) * 100}%`,
+                  top: `${(issue.y / 800) * 100}%`,
+                  width: issue.w ? `${(issue.w / 1200) * 100}%` : '24px',
+                  height: issue.h ? `${(issue.h / 800) * 100}%` : '24px',
+                } as React.CSSProperties;
+              }
+
+              const scale = Math.min(containerSize.w / imgNatural.w, containerSize.h / imgNatural.h);
+              const dispW = imgNatural.w * scale;
+              const dispH = imgNatural.h * scale;
+              const offsetX = (containerSize.w - dispW) / 2;
+              const offsetY = (containerSize.h - dispH) / 2;
+
+              // position at center of the issue box
+              const leftPx = offsetX + ((issue.x || 0) + (issue.w || 0) / 2) * scale;
+              const topPx = offsetY + ((issue.y || 0) + (issue.h || 0) / 2) * scale;
+              const widthPx = (issue.w || 24) * scale;
+              const heightPx = (issue.h || 24) * scale;
+
+              // desired marker size (in px) - keep it reasonably sized
+              const markerSizePx = Math.max(35, Math.min(48, Math.round(Math.min(32, Math.min(widthPx, heightPx) || 32))));
+
+              // Offset marker away from the element if it's near edges
+              let adjLeftPx = leftPx - markerSizePx / 2;
+              let adjTopPx = topPx - markerSizePx / 2;
+
+              // horizontal nudges
+              if (leftPx < containerSize.w * 0.2) {
+                // element near left -> nudge marker right
+                adjLeftPx = Math.min(containerSize.w - markerSizePx - 4, leftPx + Math.max(8, markerSizePx / 2));
+              } else if (leftPx > containerSize.w * 0.8) {
+                // element near right -> nudge marker left
+                adjLeftPx = Math.max(4, leftPx - markerSizePx - Math.max(8, markerSizePx / 2));
+              }
+
+              // vertical nudges
+              if (topPx < containerSize.h * 0.2) {
+                // near top -> push marker down
+                adjTopPx = Math.min(containerSize.h - markerSizePx - 4, topPx + Math.max(8, markerSizePx / 2));
+              } else if (topPx > containerSize.h * 0.8) {
+                // near bottom -> push marker up
+                adjTopPx = Math.max(4, topPx - markerSizePx - Math.max(8, markerSizePx / 2));
+              }
+
+              // clamp final marker box inside container
+              const clampedLeftPx = Math.max(0, Math.min(containerSize.w - markerSizePx, adjLeftPx));
+              const clampedTopPx = Math.max(0, Math.min(containerSize.h - markerSizePx, adjTopPx));
+
+              const leftPct = (clampedLeftPx / containerSize.w) * 100;
+              const topPct = (clampedTopPx / containerSize.h) * 100;
+              const sizePctW = (markerSizePx / containerSize.w) * 100;
+              const sizePctH = (markerSizePx / containerSize.h) * 100;
+
+              return {
+                left: `${leftPct}%`,
+                top: `${topPct}%`,
+                width: `${sizePctW}%`,
+                height: `${sizePctH}%`,
+                // expose center and marker size for tooltip placement logic via dataset
+                // (we'll compute tooltip placement below using same calculations)
+              } as React.CSSProperties;
+            };
+
+            const style = computeMarkerStyle();
+            // determine tooltip placement: show below if marker is in top quarter
+            let placeBelow = false;
+            try {
+              const parsedTop = parseFloat((style.top || '0').toString());
+              if (!Number.isNaN(parsedTop)) {
+                // top 40% -> show tooltip below; bottom 40% (i.e. top > 60%) -> show above
+                if (parsedTop < 40) placeBelow = true;
+                else if (parsedTop > 60) placeBelow = false;
+              }
+            } catch (e) {
+              placeBelow = false;
+            }
+
             return (
               <div 
                 key={index}
                 className="absolute group cursor-pointer z-10"
-                style={{ 
-                  left: `${(issue.x / 1200) * 100}%`, 
-                  top: `${(issue.y / 800) * 100}%`,
-                  width: issue.w ? `${(issue.w / 1200) * 100}%` : '24px',
-                  height: issue.h ? `${(issue.h / 800) * 100}%` : '24px',
-                }}
+                style={style}
               >
                 {/* Issue Marker */}
                 <div className={`
@@ -153,13 +253,15 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
                   {!isContrastIssue && <div className="w-2 h-2 bg-white rounded-full"></div>}
                   {isContrastIssue && issue.ratio && (
                     <div className="text-xs font-bold text-white bg-red-600/80 px-1 rounded text-center">
-                      {issue.ratio.toFixed(1)}
+                      {issue.ratio.toFixed(2)}
                     </div>
                   )}
                 </div>
                 
                 {/* Enhanced Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-20">
+                <div className={
+                  `absolute ${placeBelow ? 'top-full mt-3' : 'bottom-full mb-3'} left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-20`
+                }>
                   <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-600/50 rounded-lg p-4 shadow-xl min-w-64">
                     {isContrastIssue && issue.ratio !== undefined && compliance && ComplianceIcon ? (
                       // Contrast Issue Tooltip
@@ -172,7 +274,7 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span className="text-zinc-300">Current Ratio:</span>
-                            <span className={`font-mono ${compliance.color}`}>{issue.ratio.toFixed(2)}:1</span>
+                            <span className={`font-mono ${compliance.color}`}>{issue.ratio.toFixed(2)}</span>
                           </div>
                           
                           <div className="flex justify-between">
