@@ -13,6 +13,7 @@ import StructureSection from '@/components/dashboard/StructureSection';
 import { BackendAnalysisResponse } from '@/lib/types';
 import PageTransition from '@/components/PageTransition';
 import Silk from '@/components/Silk';
+import AIFix from '@/components/dashboard/AIFix';
 
 interface Screenshot {
   url: string;
@@ -456,6 +457,11 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* AI Fix Placeholder - will be expanded later */}
+          <div className="mt-6"> 
+            <AIFix />
           </div>
 
           {/* Debug info (remove for production) */}

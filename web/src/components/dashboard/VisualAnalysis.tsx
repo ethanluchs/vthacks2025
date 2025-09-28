@@ -241,19 +241,16 @@ export default function VisualAnalysis({ screenshots }: VisualAnalysisProps) {
                 className="absolute group cursor-pointer z-10"
                 style={style}
               >
-                {/* Issue Marker */}
-                <div className={`
-                  ${isContrastIssue ? 'w-full h-full' : 'w-6 h-6'} 
-                  ${isContrastIssue 
-                    ? 'border-2 border-red-500 bg-red-500/20' 
-                    : 'bg-red-500 rounded-full border-2 border-white flex items-center justify-center'
-                  }
-                  hover:scale-110 transition-transform shadow-lg
-                `}>
+                {/* Issue Marker: for contrast issues show only a small ratio badge; for others keep a small dot */}
+                <div className={
+                  `${isContrastIssue ? 'w-full h-full' : 'w-6 h-6'} hover:scale-110 transition-transform`
+                }>
                   {!isContrastIssue && <div className="w-2 h-2 bg-white rounded-full"></div>}
                   {isContrastIssue && issue.ratio && (
-                    <div className="text-xs font-bold text-white bg-red-600/80 px-1 rounded text-center">
-                      {issue.ratio.toFixed(2)}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="text-xs font-semibold text-white bg-red-600/80 px-2 py-0.5 rounded">
+                        {issue.ratio.toFixed(2)}
+                      </span>
                     </div>
                   )}
                 </div>
